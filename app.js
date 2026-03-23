@@ -49,6 +49,11 @@ const dom = {
   formError: document.getElementById("formError")
 };
 
+function setOverlayVisibility(element, visible) {
+  element.hidden = !visible;
+  element.style.display = visible ? "grid" : "none";
+}
+
 function svgToDataUri(svgMarkup) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgMarkup)}`;
 }
@@ -480,7 +485,7 @@ function deleteUserItem(itemId) {
 
 function openModal() {
   state.modalOpen = true;
-  dom.modalOverlay.hidden = false;
+  setOverlayVisibility(dom.modalOverlay, true);
   document.body.style.overflow = "hidden";
   render();
 }
@@ -490,21 +495,21 @@ function closeModal() {
   state.selectedItemId = null;
   state.searchQuery = "";
   dom.searchInput.value = "";
-  dom.modalOverlay.hidden = true;
+  setOverlayVisibility(dom.modalOverlay, false);
   closeAddDialog();
   document.body.style.overflow = "";
 }
 
 function openAddDialog() {
   state.addDialogOpen = true;
-  dom.addDialogOverlay.hidden = false;
+  setOverlayVisibility(dom.addDialogOverlay, true);
   resetAddDialog();
   updateAddDialogType();
 }
 
 function closeAddDialog() {
   state.addDialogOpen = false;
-  dom.addDialogOverlay.hidden = true;
+  setOverlayVisibility(dom.addDialogOverlay, false);
 }
 
 function resetAddDialog() {
@@ -898,6 +903,8 @@ function bindEvents() {
 }
 
 function init() {
+  setOverlayVisibility(dom.modalOverlay, false);
+  setOverlayVisibility(dom.addDialogOverlay, false);
   bindEvents();
   renderObjectPreviewForDialog();
   render();
