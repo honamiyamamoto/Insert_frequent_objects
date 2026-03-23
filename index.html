@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>頻出オブジェクト挿入モック</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="hero-panel">
+      <p class="eyebrow">PowerPoint 便利ツール モック</p>
+      <h1>頻出オブジェクト挿入</h1>
+      <p class="hero-copy">
+        ブラウザ上で、画像・編集可能オブジェクト・お気に入り・ユーザー追加の操作感を確認するための単体モックです。
+      </p>
+      <button id="openModalButton" class="primary-launch-button">頻出オブジェクト挿入</button>
+    </section>
+  </main>
+
+  <div id="modalOverlay" class="modal-overlay" hidden>
+    <section class="modal-window" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header class="modal-header">
+        <div>
+          <p class="eyebrow">PowerPoint 便利ツール</p>
+          <h2 id="modalTitle">頻出オブジェクト挿入</h2>
+        </div>
+        <button id="closeModalButton" class="icon-button" type="button" aria-label="閉じる">×</button>
+      </header>
+
+      <nav class="tab-row" aria-label="カテゴリ切り替え">
+        <button class="tab-button" data-tab="images" type="button">画像</button>
+        <button class="tab-button is-active" data-tab="objects" type="button">頻出オブジェクト</button>
+        <button class="tab-button" data-tab="favorites" type="button">お気に入り</button>
+        <button class="tab-button" data-tab="user" type="button">ユーザー追加</button>
+      </nav>
+
+      <section class="toolbar">
+        <div class="search-box">
+          <label class="visually-hidden" for="searchInput">検索</label>
+          <input id="searchInput" type="search" placeholder="現在のタブ内を検索">
+        </div>
+        <div class="toolbar-side">
+          <span id="itemCount" class="item-count">0件</span>
+          <button id="addUserItemButton" class="secondary-button" type="button" hidden>＋追加</button>
+        </div>
+      </section>
+
+      <section class="content-area">
+        <div id="cardGrid" class="card-grid" aria-live="polite"></div>
+        <div id="emptyState" class="empty-state" hidden></div>
+
+        <aside class="detail-pane">
+          <p class="detail-label">選択中アイテム</p>
+          <div id="selectionDetails" class="detail-card">
+            <p class="detail-placeholder">未選択です。カードを選ぶとここに概要が表示されます。</p>
+          </div>
+        </aside>
+      </section>
+
+      <footer class="modal-footer">
+        <p id="statusMessage" class="status-message">項目を選択すると「挿入」が有効になります。</p>
+        <div class="footer-actions">
+          <button id="cancelButton" class="ghost-button" type="button">キャンセル</button>
+          <button id="insertButton" class="primary-button" type="button" disabled>挿入</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+
+  <div id="addDialogOverlay" class="dialog-overlay" hidden>
+    <section class="add-dialog" role="dialog" aria-modal="true" aria-labelledby="addDialogTitle">
+      <header class="dialog-header">
+        <h3 id="addDialogTitle">ユーザー追加</h3>
+        <button id="closeAddDialogButton" class="icon-button" type="button" aria-label="閉じる">×</button>
+      </header>
+
+      <form id="addItemForm" class="dialog-form">
+        <label class="field">
+          <span>名前</span>
+          <input id="itemNameInput" name="itemName" type="text" maxlength="40" placeholder="例: 営業資料用ラベル">
+        </label>
+
+        <label class="field">
+          <span>種別</span>
+          <select id="itemTypeSelect" name="itemType">
+            <option value="image">画像</option>
+            <option value="editableObject">編集可能オブジェクト</option>
+          </select>
+        </label>
+
+        <div id="imageFields" class="field-group">
+          <label class="field">
+            <span>画像ファイル</span>
+            <input id="imageFileInput" name="imageFile" type="file" accept="image/*">
+          </label>
+          <div class="preview-box">
+            <p class="preview-label">画像プレビュー</p>
+            <div id="imagePreview" class="upload-preview is-empty">画像を選択してください</div>
+          </div>
+        </div>
+
+        <div id="objectFields" class="field-group" hidden>
+          <label class="field">
+            <span>テンプレート</span>
+            <select id="templateSelect" name="templateType">
+              <option value="arrow">矢印</option>
+              <option value="frame">枠</option>
+              <option value="speech">吹き出し</option>
+              <option value="headlineBand">見出し帯</option>
+              <option value="label">ラベル</option>
+              <option value="numberCircle">丸数字</option>
+            </select>
+          </label>
+          <div class="preview-box">
+            <p class="preview-label">テンプレートプレビュー</p>
+            <div id="objectPreview" class="upload-preview"></div>
+          </div>
+        </div>
+
+        <p id="formError" class="form-error" hidden></p>
+
+        <div class="dialog-actions">
+          <button id="cancelAddDialogButton" class="ghost-button" type="button">キャンセル</button>
+          <button class="primary-button" type="submit">追加する</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
