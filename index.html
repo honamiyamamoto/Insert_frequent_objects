@@ -46,58 +46,30 @@
       </section>
 
       <section class="ppt-workspace">
-        <aside class="slide-strip">
-          <div class="slide-thumb is-active">
-            <span class="slide-thumb-number">1</span>
-            <div class="slide-thumb-preview">
-              <div class="mini-title"></div>
-              <div class="mini-line long"></div>
-              <div class="mini-line"></div>
-            </div>
-          </div>
-          <div class="slide-thumb">
-            <span class="slide-thumb-number">2</span>
-            <div class="slide-thumb-preview is-empty"></div>
-          </div>
-        </aside>
-
-        <section class="slide-stage">
-          <div class="stage-toolbar">
-            <div>
-              <p class="stage-label">現在のスライド</p>
-              <h1 class="stage-title">提案サマリー</h1>
-            </div>
-            <div class="stage-meta">
-              <span id="insertedCountBadge" class="stage-count">挿入済み 0件</span>
-            </div>
+        <section class="canvas-scene">
+          <div class="scene-hud">
+            <div class="scene-hint">スライド 1 / 1</div>
+            <div class="scene-hint">編集ビュー</div>
           </div>
 
           <div class="slide-canvas-wrap">
             <div id="slideCanvas" class="slide-canvas" aria-label="スライドプレビュー">
               <div class="slide-header-block">
-                <div class="slide-title">頻出オブジェクト 挿入プレビュー</div>
-                <div class="slide-subtitle">挿入ボタンで、このスライド領域にオブジェクトを配置します。</div>
+                <div class="slide-title">タイトル</div>
+                <div class="slide-subtitle">サブタイトル</div>
               </div>
               <div id="slideEmptyState" class="slide-empty-state">
-                まだ何も挿入されていません。「頻出オブジェクト挿入」から項目を選んで挿入してください。
+                まだ何も挿入されていません。リボンの「頻出オブジェクト挿入」から項目を選んで挿入してください。
               </div>
               <div id="slideObjectLayer" class="slide-object-layer"></div>
             </div>
           </div>
-        </section>
 
-        <aside class="slide-sidepanel">
-          <div class="sidepanel-card">
-            <p class="sidepanel-label">選択スライド</p>
-            <strong>1 / 2</strong>
+          <div class="scene-statusbar">
+            <span id="insertedCountBadge" class="stage-count">挿入済み 0件</span>
+            <div id="latestInsertInfo" class="latest-insert-info">まだ挿入されていません。</div>
           </div>
-          <div class="sidepanel-card">
-            <p class="sidepanel-label">直近の挿入</p>
-            <div id="latestInsertInfo" class="latest-insert-info">
-              まだ挿入されていません。
-            </div>
-          </div>
-        </aside>
+        </section>
       </section>
     </section>
   </main>
