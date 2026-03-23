@@ -46,7 +46,11 @@ const dom = {
   templateSelect: document.getElementById("templateSelect"),
   imagePreview: document.getElementById("imagePreview"),
   objectPreview: document.getElementById("objectPreview"),
-  formError: document.getElementById("formError")
+  formError: document.getElementById("formError"),
+  slideObjectLayer: document.getElementById("slideObjectLayer"),
+  slideEmptyState: document.getElementById("slideEmptyState"),
+  insertedCountBadge: document.getElementById("insertedCountBadge"),
+  latestInsertInfo: document.getElementById("latestInsertInfo")
 };
 
 function setOverlayVisibility(element, visible) {
@@ -394,9 +398,11 @@ const state = {
   activeTab: "objects",
   searchQuery: "",
   selectedItemId: null,
+  insertedItems: [],
   modalOpen: false,
   addDialogOpen: false,
   nextUserId: 4,
+  nextInsertedId: 1,
   pendingUpload: null,
   collections: {
     images: createSampleImages(),
@@ -639,14 +645,82 @@ function buildInsertPayload(item) {
   return payload;
 }
 
+function createSlidePlacement(index, type) {
+  const placements = [
+    { x: 60, y: 170, width: 240, height: 150 },
+    { x: 328, y: 170, width: 240, height: 150 },
+    { x: 596, y: 170, width: 240, height: 150 },
+    { x: 94, y: 346, width: 250, height: 152 },
+    { x: 380, y: 346, width: 250, height: 152 },
+    { x: 664, y: 346, width: 190, height: 138 }
+  ];
+  const base = placements[index % placements.length];
+  if (type === "editableObject") {
+    return {
+      ...base,
+      width: Math.round(base.width * 0.92),
+      height: Math.round(base.height * 0.92)
+    };
+  }
+  return base;
+}
+
+function createInsertedSlideItem(item, payload) {
+  const placement = createSlidePlacement(state.insertedItems.length, item.type);
+  return {
+    slideItemId: `placed-${String(state.nextInsertedId).padStart(3, "0")}`,
+    sourceId: item.id,
+    name: item.name,
+    type: item.type,
+    sourceTab: item.sourceTab,
+    favorite: item.favorite,
+    placement,
+    preview: payload.preview,
+    dataSummary: payload.dataSummary
+  };
+}
+
+function renderSlideItems() {
+  dom.insertedCountBadge.textContent = `挿入済み ${state.insertedItems.length}件`;
+  dom.slideEmptyState.hidden = state.insertedItems.length > 0;
+
+  if (state.insertedItems.length === 0) {
+    dom.slideObjectLayer.innerHTML = "";
+    dom.latestInsertInfo.textContent = "まだ挿入されていません。";
+    return;
+  }
+
+  dom.slideObjectLayer.innerHTML = state.insertedItems.map((item) => `
+    <div
+      class="slide-object ${item.type === "image" ? "is-image" : "is-object"}"
+      style="left:${item.placement.x}px; top:${item.placement.y}px; width:${item.placement.width}px; height:${item.placement.height}px;"
+    >
+      ${renderPreviewMarkup(item.preview)}
+      <div class="slide-object-caption">${escapeHtml(item.name)}</div>
+    </div>
+  `).join("");
+
+  const latest = state.insertedItems[state.insertedItems.length - 1];
+  dom.latestInsertInfo.innerHTML = `
+    <strong>${escapeHtml(latest.name)}</strong><br>
+    種別: ${latest.type === "image" ? "画像" : "編集可能オブジェクト"}<br>
+    元タブ: ${TAB_CONFIG[latest.sourceTab].label}
+  `;
+}
+
 function insertSelectedItem() {
   const item = findItemById(state.selectedItemId);
   if (!item) {
     return;
   }
   const payload = buildInsertPayload(item);
+  const slideItem = createInsertedSlideItem(item, payload);
+  state.insertedItems.push(slideItem);
+  state.nextInsertedId += 1;
   console.log("Insert mock payload:", payload);
-  dom.statusMessage.textContent = `「${item.name}」の情報を console に出力しました。`;
+  dom.statusMessage.textContent = `「${item.name}」をスライドに挿入し、情報を console に出力しました。`;
+  renderSlideItems();
+  closeModal();
 }
 
 function renderPreviewMarkup(preview) {
@@ -792,6 +866,7 @@ function render() {
   renderCards();
   renderSelectionDetails();
   renderFooterState();
+  renderSlideItems();
 }
 
 function handleGridClick(event) {

@@ -8,13 +8,97 @@
 </head>
 <body>
   <main class="app-shell">
-    <section class="hero-panel">
-      <p class="eyebrow">PowerPoint 便利ツール モック</p>
-      <h1>頻出オブジェクト挿入</h1>
-      <p class="hero-copy">
-        ブラウザ上で、画像・編集可能オブジェクト・お気に入り・ユーザー追加の操作感を確認するための単体モックです。
-      </p>
-      <button id="openModalButton" class="primary-launch-button">頻出オブジェクト挿入</button>
+    <section class="ppt-shell" aria-label="PowerPoint モック画面">
+      <header class="ppt-titlebar">
+        <div class="ppt-appinfo">
+          <span class="ppt-dot"></span>
+          <strong>PowerPoint</strong>
+          <span class="ppt-file">提案資料_頻出オブジェクト検証.pptx</span>
+        </div>
+        <div class="ppt-window-actions">
+          <button class="window-chip" type="button" aria-label="最小化">−</button>
+          <button class="window-chip" type="button" aria-label="元に戻す">□</button>
+          <button class="window-chip is-close" type="button" aria-label="閉じる">×</button>
+        </div>
+      </header>
+
+      <section class="ppt-ribbon">
+        <div class="ribbon-tabs">
+          <span class="ribbon-tab is-active">ホーム</span>
+          <span class="ribbon-tab">挿入</span>
+          <span class="ribbon-tab">デザイン</span>
+          <span class="ribbon-tab">図形の書式</span>
+        </div>
+        <div class="ribbon-tools">
+          <div class="tool-group">
+            <p class="tool-group-label">便利ツール</p>
+            <button id="openModalButton" class="primary-launch-button">頻出オブジェクト挿入</button>
+          </div>
+          <div class="tool-group">
+            <p class="tool-group-label">プレビュー</p>
+            <div class="tool-ghosts">
+              <span class="tool-ghost"></span>
+              <span class="tool-ghost wide"></span>
+              <span class="tool-ghost"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="ppt-workspace">
+        <aside class="slide-strip">
+          <div class="slide-thumb is-active">
+            <span class="slide-thumb-number">1</span>
+            <div class="slide-thumb-preview">
+              <div class="mini-title"></div>
+              <div class="mini-line long"></div>
+              <div class="mini-line"></div>
+            </div>
+          </div>
+          <div class="slide-thumb">
+            <span class="slide-thumb-number">2</span>
+            <div class="slide-thumb-preview is-empty"></div>
+          </div>
+        </aside>
+
+        <section class="slide-stage">
+          <div class="stage-toolbar">
+            <div>
+              <p class="stage-label">現在のスライド</p>
+              <h1 class="stage-title">提案サマリー</h1>
+            </div>
+            <div class="stage-meta">
+              <span id="insertedCountBadge" class="stage-count">挿入済み 0件</span>
+            </div>
+          </div>
+
+          <div class="slide-canvas-wrap">
+            <div id="slideCanvas" class="slide-canvas" aria-label="スライドプレビュー">
+              <div class="slide-header-block">
+                <div class="slide-title">頻出オブジェクト 挿入プレビュー</div>
+                <div class="slide-subtitle">挿入ボタンで、このスライド領域にオブジェクトを配置します。</div>
+              </div>
+              <div id="slideEmptyState" class="slide-empty-state">
+                まだ何も挿入されていません。「頻出オブジェクト挿入」から項目を選んで挿入してください。
+              </div>
+              <div id="slideObjectLayer" class="slide-object-layer"></div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="slide-sidepanel">
+          <div class="sidepanel-card">
+            <p class="sidepanel-label">選択スライド</p>
+            <strong>1 / 2</strong>
+          </div>
+          <div class="sidepanel-card">
+            <p class="sidepanel-label">直近の挿入</p>
+            <div id="latestInsertInfo" class="latest-insert-info">
+              まだ挿入されていません。
+            </div>
+          </div>
+        </aside>
+      </section>
     </section>
   </main>
 
