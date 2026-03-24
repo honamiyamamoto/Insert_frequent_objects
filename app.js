@@ -250,6 +250,7 @@ function createImageItem(config) {
       src: config.imageSrc,
       kind: config.imageKind
     },
+    searchKeywords: config.keywords,
     searchableText: `${config.name} ${config.imageKind} ${config.keywords.join(" ")}`.toLowerCase(),
     imageSrc: config.imageSrc,
     imageKind: config.imageKind,
@@ -277,6 +278,7 @@ function createEditableItem(config) {
       svgMarkup: config.svgMarkup,
       templateType: config.templateType
     },
+    searchKeywords: config.keywords,
     searchableText: `${config.name} ${config.templateType} ${config.editableProps.text} ${config.keywords.join(" ")}`.toLowerCase(),
     templateType: config.templateType,
     svgMarkup: config.svgMarkup,
@@ -403,7 +405,7 @@ function createInitialUserItems() {
 const state = {
   activeTab: "objects",
   searchQuery: "",
-  selectedItemId: null,
+  selectedItemIds: [],
   insertedItems: [],
   pickedSlideItemId: null,
   modalOpen: false,
@@ -458,22 +460,42 @@ function getFilteredItems() {
   return items.filter((item) => item.searchableText.includes(query));
 }
 
+function isItemSelected(itemId) {
+  return state.selectedItemIds.includes(itemId);
+}
+
+function buildSearchableText(item) {
+  const keywords = item.searchKeywords || [];
+  if (item.type === "image") {
+    return `${item.name} ${item.imageKind || ""} ${keywords.join(" ")}`.toLowerCase();
+  }
+  return `${item.name} ${item.templateType || ""} ${item.editableProps?.text || ""} ${keywords.join(" ")}`.toLowerCase();
+}
+
+function clearSelection() {
+  state.selectedItemIds = [];
+}
+
 function setActiveTab(tab) {
   state.activeTab = tab;
   state.searchQuery = "";
-  state.selectedItemId = null;
+  clearSelection();
   dom.searchInput.value = "";
   render();
 }
 
 function setSearchQuery(value) {
   state.searchQuery = value;
-  state.selectedItemId = null;
+  clearSelection();
   render();
 }
 
-function setSelectedItem(itemId) {
-  state.selectedItemId = itemId;
+function toggleSelectedItem(itemId) {
+  if (isItemSelected(itemId)) {
+    state.selectedItemIds = state.selectedItemIds.filter((id) => id !== itemId);
+  } else {
+    state.selectedItemIds = [...state.selectedItemIds, itemId];
+  }
   render();
 }
 
@@ -483,18 +505,41 @@ function toggleFavorite(itemId) {
     return;
   }
   item.favorite = !item.favorite;
-  if (state.activeTab === "favorites" && state.selectedItemId === itemId && !item.favorite) {
-    state.selectedItemId = null;
+  if (state.activeTab === "favorites" && !item.favorite) {
+    state.selectedItemIds = state.selectedItemIds.filter((id) => id !== itemId);
   }
   render();
 }
 
 function deleteUserItem(itemId) {
+  if (!window.confirm("このユーザー追加アイテムを削除しますか？")) {
+    return;
+  }
   state.collections.user.images = state.collections.user.images.filter((item) => item.id !== itemId);
   state.collections.user.editableObjects = state.collections.user.editableObjects.filter((item) => item.id !== itemId);
-  if (state.selectedItemId === itemId) {
-    state.selectedItemId = null;
+  state.selectedItemIds = state.selectedItemIds.filter((id) => id !== itemId);
+  render();
+}
+
+function renameItem(itemId) {
+  const item = findItemById(itemId);
+  if (!item) {
+    return;
   }
+
+  const nextName = window.prompt("新しい名称を入力してください。", item.name);
+  if (nextName === null) {
+    return;
+  }
+
+  const trimmed = nextName.trim();
+  if (!trimmed) {
+    window.alert("名称を入力してください。");
+    return;
+  }
+
+  item.name = trimmed;
+  item.searchableText = buildSearchableText(item);
   render();
 }
 
@@ -510,7 +555,7 @@ function closeModal() {
     stopObjectPickMode(false);
   }
   state.modalOpen = false;
-  state.selectedItemId = null;
+  clearSelection();
   state.searchQuery = "";
   dom.searchInput.value = "";
   setOverlayVisibility(dom.modalOverlay, false);
@@ -676,7 +721,7 @@ function addUserItem(item) {
   state.activeTab = "user";
   state.searchQuery = "";
   dom.searchInput.value = "";
-  state.selectedItemId = item.id;
+  state.selectedItemIds = [item.id];
   render();
 }
 
@@ -777,16 +822,24 @@ function renderSlideItems() {
 }
 
 function insertSelectedItem() {
-  const item = findItemById(state.selectedItemId);
-  if (!item) {
+  const items = state.selectedItemIds
+    .map((id) => findItemById(id))
+    .filter(Boolean);
+
+  if (items.length === 0) {
     return;
   }
-  const payload = buildInsertPayload(item);
-  const slideItem = createInsertedSlideItem(item, payload);
-  state.insertedItems.push(slideItem);
-  state.nextInsertedId += 1;
-  console.log("Insert mock payload:", payload);
-  dom.statusMessage.textContent = `「${item.name}」をスライドに挿入し、情報を console に出力しました。`;
+
+  const payloads = items.map((item) => {
+    const payload = buildInsertPayload(item);
+    const slideItem = createInsertedSlideItem(item, payload);
+    state.insertedItems.push(slideItem);
+    state.nextInsertedId += 1;
+    return payload;
+  });
+
+  console.log("Insert mock payloads:", payloads);
+  dom.statusMessage.textContent = `${items.length}件のアイテムをスライドに挿入し、情報を console に出力しました。`;
   renderSlideItems();
   closeModal();
 }
@@ -803,8 +856,9 @@ function renderPreviewMarkup(preview) {
 
 function renderCard(item) {
   const typeLabel = getTypeLabel(item.type);
-  const isSelected = item.id === state.selectedItemId;
+  const isSelected = isItemSelected(item.id);
   const favoriteClass = item.favorite ? "favorite-button is-active" : "favorite-button";
+  const renameButton = `<button class="rename-button" data-action="rename" data-id="${item.id}" type="button" aria-label="名称変更">名</button>`;
   const deleteButton = state.activeTab === "user"
     ? `<button class="delete-button" data-action="delete" data-id="${item.id}" type="button" aria-label="削除">削</button>`
     : "";
@@ -813,6 +867,7 @@ function renderCard(item) {
     <article class="asset-card ${isSelected ? "is-selected" : ""}" data-id="${item.id}" tabindex="0">
       <div class="card-actions">
         <button class="${favoriteClass}" data-action="favorite" data-id="${item.id}" type="button" aria-label="お気に入り">★</button>
+        ${renameButton}
         ${deleteButton}
       </div>
       <div class="asset-preview">${renderPreviewMarkup(item.preview)}</div>
@@ -845,13 +900,33 @@ function renderCards() {
 }
 
 function renderSelectionDetails() {
-  const item = findItemById(state.selectedItemId);
-  if (!item) {
+  const items = state.selectedItemIds
+    .map((id) => findItemById(id))
+    .filter(Boolean);
+
+  if (items.length === 0) {
     dom.selectionDetails.innerHTML = `
       <p class="detail-placeholder">未選択です。カードを選ぶとここに概要が表示されます。</p>
     `;
     return;
   }
+
+  if (items.length > 1) {
+    dom.selectionDetails.innerHTML = `
+      <h3 class="detail-title">${items.length}件を選択中</h3>
+      <div class="detail-list">
+        ${items.map((item) => `
+          <div class="detail-row">
+            <span>${getTypeLabel(item.type)}</span>
+            <strong>${escapeHtml(item.name)}</strong>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    return;
+  }
+
+  const [item] = items;
 
   const typeLabel = getTypeLabel(item.type);
   const summaryMarkup = item.type === "image"
@@ -906,13 +981,20 @@ function renderSelectionDetails() {
 }
 
 function renderFooterState() {
-  const item = findItemById(state.selectedItemId);
-  dom.insertButton.disabled = !item;
-  if (!item) {
+  const items = state.selectedItemIds
+    .map((id) => findItemById(id))
+    .filter(Boolean);
+
+  dom.insertButton.disabled = items.length === 0;
+  if (items.length === 0) {
     dom.statusMessage.textContent = "項目を選択すると「挿入」が有効になります。";
     return;
   }
-  dom.statusMessage.textContent = `選択中: ${item.name} / ${getTypeLabel(item.type)}`;
+  if (items.length === 1) {
+    dom.statusMessage.textContent = `選択中: ${items[0].name} / ${getTypeLabel(items[0].type)}`;
+    return;
+  }
+  dom.statusMessage.textContent = `${items.length}件を選択中です。まとめて挿入できます。`;
 }
 
 function renderTabs() {
@@ -950,6 +1032,13 @@ function handleGridClick(event) {
     return;
   }
 
+  const renameButton = event.target.closest("[data-action='rename']");
+  if (renameButton) {
+    event.stopPropagation();
+    renameItem(renameButton.dataset.id);
+    return;
+  }
+
   const deleteButton = event.target.closest("[data-action='delete']");
   if (deleteButton) {
     event.stopPropagation();
@@ -959,7 +1048,7 @@ function handleGridClick(event) {
 
   const card = event.target.closest(".asset-card");
   if (card) {
-    setSelectedItem(card.dataset.id);
+    toggleSelectedItem(card.dataset.id);
   }
 }
 
@@ -972,7 +1061,7 @@ function handleGridKeydown(event) {
     return;
   }
   event.preventDefault();
-  setSelectedItem(card.dataset.id);
+  toggleSelectedItem(card.dataset.id);
 }
 
 function handleImageFileChange(event) {

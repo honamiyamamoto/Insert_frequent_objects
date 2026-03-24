@@ -724,6 +724,7 @@ button {
 }
 
 .favorite-button,
+.rename-button,
 .delete-button {
   display: inline-flex;
   align-items: center;
@@ -737,6 +738,7 @@ button {
 }
 
 .favorite-button:hover,
+.rename-button:hover,
 .delete-button:hover {
   background: #f3f6fa;
 }
@@ -749,6 +751,11 @@ button {
 
 .delete-button {
   color: var(--danger);
+}
+
+.rename-button {
+  color: #4d6f98;
+  font-weight: 700;
 }
 
 .detail-pane {
