@@ -490,11 +490,15 @@ function setSearchQuery(value) {
   render();
 }
 
-function toggleSelectedItem(itemId) {
-  if (isItemSelected(itemId)) {
-    state.selectedItemIds = state.selectedItemIds.filter((id) => id !== itemId);
+function setCardSelection(itemId, additive = false) {
+  if (additive) {
+    if (isItemSelected(itemId)) {
+      state.selectedItemIds = state.selectedItemIds.filter((id) => id !== itemId);
+    } else {
+      state.selectedItemIds = [...state.selectedItemIds, itemId];
+    }
   } else {
-    state.selectedItemIds = [...state.selectedItemIds, itemId];
+    state.selectedItemIds = [itemId];
   }
   render();
 }
@@ -858,16 +862,14 @@ function renderCard(item) {
   const typeLabel = getTypeLabel(item.type);
   const isSelected = isItemSelected(item.id);
   const favoriteClass = item.favorite ? "favorite-button is-active" : "favorite-button";
-  const renameButton = `<button class="rename-button" data-action="rename" data-id="${item.id}" type="button" aria-label="名称変更">名</button>`;
   const deleteButton = state.activeTab === "user"
-    ? `<button class="delete-button" data-action="delete" data-id="${item.id}" type="button" aria-label="削除">削</button>`
+    ? `<button class="delete-button" data-action="delete" data-id="${item.id}" type="button" aria-label="削除">×</button>`
     : "";
 
   return `
     <article class="asset-card ${isSelected ? "is-selected" : ""}" data-id="${item.id}" tabindex="0">
       <div class="card-actions">
         <button class="${favoriteClass}" data-action="favorite" data-id="${item.id}" type="button" aria-label="お気に入り">★</button>
-        ${renameButton}
         ${deleteButton}
       </div>
       <div class="asset-preview">${renderPreviewMarkup(item.preview)}</div>
@@ -961,7 +963,10 @@ function renderSelectionDetails() {
 
   dom.selectionDetails.innerHTML = `
     <div class="detail-preview">${renderPreviewMarkup(item.preview)}</div>
-    <h3 class="detail-title">${escapeHtml(item.name)}</h3>
+    <div class="detail-title-row">
+      <h3 class="detail-title">${escapeHtml(item.name)}</h3>
+      <button class="detail-edit-button" data-action="edit-selected" data-id="${item.id}" type="button">編集</button>
+    </div>
     <div class="detail-list">
       <div class="detail-row">
         <span>種別</span>
@@ -1032,13 +1037,6 @@ function handleGridClick(event) {
     return;
   }
 
-  const renameButton = event.target.closest("[data-action='rename']");
-  if (renameButton) {
-    event.stopPropagation();
-    renameItem(renameButton.dataset.id);
-    return;
-  }
-
   const deleteButton = event.target.closest("[data-action='delete']");
   if (deleteButton) {
     event.stopPropagation();
@@ -1048,7 +1046,7 @@ function handleGridClick(event) {
 
   const card = event.target.closest(".asset-card");
   if (card) {
-    toggleSelectedItem(card.dataset.id);
+    setCardSelection(card.dataset.id, event.ctrlKey || event.metaKey);
   }
 }
 
@@ -1061,7 +1059,15 @@ function handleGridKeydown(event) {
     return;
   }
   event.preventDefault();
-  toggleSelectedItem(card.dataset.id);
+  setCardSelection(card.dataset.id, event.ctrlKey || event.metaKey);
+}
+
+function handleSelectionDetailsClick(event) {
+  const editButton = event.target.closest("[data-action='edit-selected']");
+  if (!editButton) {
+    return;
+  }
+  renameItem(editButton.dataset.id);
 }
 
 function handleImageFileChange(event) {
@@ -1120,6 +1126,7 @@ function bindEvents() {
   dom.insertButton.addEventListener("click", insertSelectedItem);
   dom.cardGrid.addEventListener("click", handleGridClick);
   dom.cardGrid.addEventListener("keydown", handleGridKeydown);
+  dom.selectionDetails.addEventListener("click", handleSelectionDetailsClick);
   dom.itemTypeSelect.addEventListener("change", updateAddDialogType);
   dom.imageFileInput.addEventListener("change", handleImageFileChange);
   dom.pickSlideObjectButton.addEventListener("click", startObjectPickMode);

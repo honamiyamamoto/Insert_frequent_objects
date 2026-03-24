@@ -724,22 +724,26 @@ button {
 }
 
 .favorite-button,
-.rename-button,
-.delete-button {
+.delete-button,
+.detail-edit-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
   border-radius: 8px;
   border: 1px solid #d7dce3;
   background: #ffffff;
   color: #778190;
 }
 
+.favorite-button,
+.delete-button {
+  width: 34px;
+  height: 34px;
+}
+
 .favorite-button:hover,
-.rename-button:hover,
-.delete-button:hover {
+.delete-button:hover,
+.detail-edit-button:hover {
   background: #f3f6fa;
 }
 
@@ -750,11 +754,7 @@ button {
 }
 
 .delete-button {
-  color: var(--danger);
-}
-
-.rename-button {
-  color: #4d6f98;
+  color: #d94757;
   font-weight: 700;
 }
 
@@ -808,6 +808,25 @@ button {
 .detail-title {
   margin: 0 0 12px;
   font-size: 18px;
+}
+
+.detail-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.detail-title-row .detail-title {
+  margin: 0;
+}
+
+.detail-edit-button {
+  min-height: 34px;
+  padding: 0 12px;
+  color: #3d6fa8;
+  font-weight: 700;
 }
 
 .detail-list {
