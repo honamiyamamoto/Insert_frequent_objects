@@ -43,14 +43,16 @@ const dom = {
   imageFields: document.getElementById("imageFields"),
   objectFields: document.getElementById("objectFields"),
   imageFileInput: document.getElementById("imageFileInput"),
-  templateSelect: document.getElementById("templateSelect"),
   imagePreview: document.getElementById("imagePreview"),
   objectPreview: document.getElementById("objectPreview"),
   formError: document.getElementById("formError"),
+  objectPickStatus: document.getElementById("objectPickStatus"),
+  pickSlideObjectButton: document.getElementById("pickSlideObjectButton"),
   slideObjectLayer: document.getElementById("slideObjectLayer"),
   slideEmptyState: document.getElementById("slideEmptyState"),
   insertedCountBadge: document.getElementById("insertedCountBadge"),
-  latestInsertInfo: document.getElementById("latestInsertInfo")
+  latestInsertInfo: document.getElementById("latestInsertInfo"),
+  pickModeBanner: document.getElementById("pickModeBanner")
 };
 
 function setOverlayVisibility(element, visible) {
@@ -69,6 +71,10 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function getTypeLabel(type) {
+  return type === "image" ? "画像" : "オブジェクト";
 }
 
 function motifPath(kind) {
@@ -399,11 +405,14 @@ const state = {
   searchQuery: "",
   selectedItemId: null,
   insertedItems: [],
+  pickedSlideItemId: null,
   modalOpen: false,
   addDialogOpen: false,
+  objectPickMode: false,
   nextUserId: 4,
   nextInsertedId: 1,
   pendingUpload: null,
+  pendingObjectSource: null,
   collections: {
     images: createSampleImages(),
     objects: createSampleObjects(),
@@ -497,6 +506,9 @@ function openModal() {
 }
 
 function closeModal() {
+  if (state.objectPickMode) {
+    stopObjectPickMode(false);
+  }
   state.modalOpen = false;
   state.selectedItemId = null;
   state.searchQuery = "";
@@ -514,6 +526,9 @@ function openAddDialog() {
 }
 
 function closeAddDialog() {
+  if (state.objectPickMode) {
+    stopObjectPickMode(false);
+  }
   state.addDialogOpen = false;
   setOverlayVisibility(dom.addDialogOverlay, false);
 }
@@ -521,13 +536,11 @@ function closeAddDialog() {
 function resetAddDialog() {
   dom.addItemForm.reset();
   state.pendingUpload = null;
+  state.pendingObjectSource = null;
   hideFormError();
   dom.imagePreview.classList.add("is-empty");
   dom.imagePreview.textContent = "画像を選択してください";
-  dom.objectPreview.innerHTML = renderPreviewMarkup({
-    mode: "svg",
-    svgMarkup: createObjectSvg(dom.templateSelect.value)
-  });
+  renderObjectPreviewForDialog();
 }
 
 function updateAddDialogType() {
@@ -535,6 +548,7 @@ function updateAddDialogType() {
   dom.imageFields.hidden = !isImage;
   dom.objectFields.hidden = isImage;
   hideFormError();
+  renderObjectPreviewForDialog();
 }
 
 function showFormError(message) {
@@ -545,6 +559,53 @@ function showFormError(message) {
 function hideFormError() {
   dom.formError.hidden = true;
   dom.formError.textContent = "";
+}
+
+function getSlideObjectCandidates() {
+  return state.insertedItems.filter((item) => item.type === "editableObject");
+}
+
+function startObjectPickMode() {
+  if (getSlideObjectCandidates().length === 0) {
+    showFormError("先にスライド上へオブジェクトを挿入してから選択してください。");
+    return;
+  }
+
+  state.objectPickMode = true;
+  state.pickedSlideItemId = null;
+  setOverlayVisibility(dom.addDialogOverlay, false);
+  setOverlayVisibility(dom.modalOverlay, false);
+  dom.pickModeBanner.hidden = false;
+  renderSlideItems();
+}
+
+function stopObjectPickMode(restoreWindows = true) {
+  state.objectPickMode = false;
+  state.pickedSlideItemId = null;
+  dom.pickModeBanner.hidden = true;
+
+  if (restoreWindows) {
+    if (state.modalOpen) {
+      setOverlayVisibility(dom.modalOverlay, true);
+    }
+    if (state.addDialogOpen) {
+      setOverlayVisibility(dom.addDialogOverlay, true);
+    }
+  }
+
+  renderSlideItems();
+}
+
+function selectSlideObjectForUserAdd(slideItemId) {
+  const slideItem = state.insertedItems.find((item) => item.slideItemId === slideItemId && item.type === "editableObject");
+  if (!slideItem) {
+    return;
+  }
+
+  state.pendingObjectSource = slideItem;
+  state.pickedSlideItemId = slideItemId;
+  stopObjectPickMode(true);
+  renderObjectPreviewForDialog();
 }
 
 function createUserItemFromForm() {
@@ -574,9 +635,14 @@ function createUserItemFromForm() {
     });
   }
 
-  const templateType = dom.templateSelect.value;
-  const template = OBJECT_TEMPLATE_DEFS[templateType];
-  const svgMarkup = createObjectSvg(templateType, { text: template.text });
+  if (!state.pendingObjectSource) {
+    showFormError("スライド上のオブジェクトを選択してください。");
+    return null;
+  }
+
+  const source = state.pendingObjectSource;
+  const templateType = source.dataSummary.templateType || source.preview.templateType || "frame";
+  const svgMarkup = source.preview.svgMarkup;
 
   return createEditableItem({
     id: `user-${String(state.nextUserId).padStart(2, "0")}`,
@@ -584,18 +650,18 @@ function createUserItemFromForm() {
     sourceTab: "user",
     templateType,
     svgMarkup,
-    objectDefinition: {
-      shapeKind: template.shapeKind,
+    objectDefinition: source.dataSummary.objectDefinition || {
+      shapeKind: source.dataSummary.shapeKind || "customObject",
       templateType,
       elementCount: countSvgElements(svgMarkup),
-      layoutHint: `${template.label}テンプレート`
+      layoutHint: "スライド選択オブジェクト"
     },
     editableProps: {
-      fillColor: template.fillColor,
-      strokeColor: template.strokeColor,
-      text: template.text
+      fillColor: source.dataSummary.fillColor || "#5a93df",
+      strokeColor: source.dataSummary.strokeColor || "#dbe9ff",
+      text: source.dataSummary.text || name
     },
-    keywords: ["ユーザー追加", template.label, name]
+    keywords: ["ユーザー追加", "スライド選択", name]
   });
 }
 
@@ -692,7 +758,9 @@ function renderSlideItems() {
 
   dom.slideObjectLayer.innerHTML = state.insertedItems.map((item) => `
     <div
-      class="slide-object ${item.type === "image" ? "is-image" : "is-object"}"
+      class="slide-object ${item.type === "image" ? "is-image" : "is-object"} ${state.objectPickMode && item.type === "editableObject" ? "is-pickable" : ""} ${state.pickedSlideItemId === item.slideItemId ? "is-picked" : ""}"
+      data-slide-item-id="${item.slideItemId}"
+      data-slide-item-type="${item.type}"
       style="left:${item.placement.x}px; top:${item.placement.y}px; width:${item.placement.width}px; height:${item.placement.height}px;"
     >
       ${renderPreviewMarkup(item.preview)}
@@ -703,7 +771,7 @@ function renderSlideItems() {
   const latest = state.insertedItems[state.insertedItems.length - 1];
   dom.latestInsertInfo.innerHTML = `
     <strong>${escapeHtml(latest.name)}</strong><br>
-    種別: ${latest.type === "image" ? "画像" : "編集可能オブジェクト"}<br>
+    種別: ${getTypeLabel(latest.type)}<br>
     元タブ: ${TAB_CONFIG[latest.sourceTab].label}
   `;
 }
@@ -734,7 +802,7 @@ function renderPreviewMarkup(preview) {
 }
 
 function renderCard(item) {
-  const typeLabel = item.type === "image" ? "画像" : "編集可能オブジェクト";
+  const typeLabel = getTypeLabel(item.type);
   const isSelected = item.id === state.selectedItemId;
   const favoriteClass = item.favorite ? "favorite-button is-active" : "favorite-button";
   const deleteButton = state.activeTab === "user"
@@ -785,7 +853,7 @@ function renderSelectionDetails() {
     return;
   }
 
-  const typeLabel = item.type === "image" ? "画像" : "編集可能オブジェクト";
+  const typeLabel = getTypeLabel(item.type);
   const summaryMarkup = item.type === "image"
     ? `
       <div class="detail-row">
@@ -844,7 +912,7 @@ function renderFooterState() {
     dom.statusMessage.textContent = "項目を選択すると「挿入」が有効になります。";
     return;
   }
-  dom.statusMessage.textContent = `選択中: ${item.name} / ${item.type === "image" ? "画像" : "編集可能オブジェクト"}`;
+  dom.statusMessage.textContent = `選択中: ${item.name} / ${getTypeLabel(item.type)}`;
 }
 
 function renderTabs() {
@@ -854,11 +922,16 @@ function renderTabs() {
 }
 
 function renderObjectPreviewForDialog() {
+  if (!state.pendingObjectSource) {
+    dom.objectPreview.classList.add("is-empty");
+    dom.objectPreview.textContent = "まだオブジェクトが選択されていません";
+    dom.objectPickStatus.textContent = "追加したいオブジェクトを、現在のスライド上から選択してください。";
+    return;
+  }
+
   dom.objectPreview.classList.remove("is-empty");
-  dom.objectPreview.innerHTML = renderPreviewMarkup({
-    mode: "svg",
-    svgMarkup: createObjectSvg(dom.templateSelect.value)
-  });
+  dom.objectPreview.innerHTML = renderPreviewMarkup(state.pendingObjectSource.preview);
+  dom.objectPickStatus.textContent = `選択中: ${state.pendingObjectSource.name}`;
 }
 
 function render() {
@@ -925,6 +998,23 @@ function handleImageFileChange(event) {
   reader.readAsDataURL(file);
 }
 
+function handleSlideObjectClick(event) {
+  if (!state.objectPickMode) {
+    return;
+  }
+
+  const slideObject = event.target.closest("[data-slide-item-id]");
+  if (!slideObject) {
+    return;
+  }
+
+  if (slideObject.dataset.slideItemType !== "editableObject") {
+    return;
+  }
+
+  selectSlideObjectForUserAdd(slideObject.dataset.slideItemId);
+}
+
 function bindEvents() {
   dom.openModalButton.addEventListener("click", openModal);
   dom.closeModalButton.addEventListener("click", closeModal);
@@ -942,8 +1032,9 @@ function bindEvents() {
   dom.cardGrid.addEventListener("click", handleGridClick);
   dom.cardGrid.addEventListener("keydown", handleGridKeydown);
   dom.itemTypeSelect.addEventListener("change", updateAddDialogType);
-  dom.templateSelect.addEventListener("change", renderObjectPreviewForDialog);
   dom.imageFileInput.addEventListener("change", handleImageFileChange);
+  dom.pickSlideObjectButton.addEventListener("click", startObjectPickMode);
+  dom.slideObjectLayer.addEventListener("click", handleSlideObjectClick);
 
   dom.addItemForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -967,6 +1058,10 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.objectPickMode) {
+      stopObjectPickMode(true);
+      return;
+    }
     if (event.key === "Escape" && state.addDialogOpen) {
       closeAddDialog();
       return;

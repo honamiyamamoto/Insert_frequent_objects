@@ -51,6 +51,9 @@
             <div class="scene-hint">スライド 1 / 1</div>
             <div class="scene-hint">編集ビュー</div>
           </div>
+          <div id="pickModeBanner" class="pick-mode-banner" hidden>
+            ユーザー追加するオブジェクトを、スライド上でクリックしてください。
+          </div>
 
           <div class="slide-canvas-wrap">
             <div id="slideCanvas" class="slide-canvas" aria-label="スライドプレビュー">
@@ -141,7 +144,7 @@
           <span>種別</span>
           <select id="itemTypeSelect" name="itemType">
             <option value="image">画像</option>
-            <option value="editableObject">編集可能オブジェクト</option>
+            <option value="editableObject">オブジェクト</option>
           </select>
         </label>
 
@@ -157,19 +160,17 @@
         </div>
 
         <div id="objectFields" class="field-group" hidden>
-          <label class="field">
-            <span>テンプレート</span>
-            <select id="templateSelect" name="templateType">
-              <option value="arrow">矢印</option>
-              <option value="frame">枠</option>
-              <option value="speech">吹き出し</option>
-              <option value="headlineBand">見出し帯</option>
-              <option value="label">ラベル</option>
-              <option value="numberCircle">丸数字</option>
-            </select>
-          </label>
+          <div class="field">
+            <span>ページ上のオブジェクト</span>
+            <div class="object-pick-box">
+              <p id="objectPickStatus" class="object-pick-status">
+                追加したいオブジェクトを、現在のスライド上から選択してください。
+              </p>
+              <button id="pickSlideObjectButton" class="secondary-button" type="button">スライド上のオブジェクトを選択</button>
+            </div>
+          </div>
           <div class="preview-box">
-            <p class="preview-label">テンプレートプレビュー</p>
+            <p class="preview-label">選択オブジェクトプレビュー</p>
             <div id="objectPreview" class="upload-preview"></div>
           </div>
         </div>

@@ -211,6 +211,20 @@ button {
   gap: 14px;
 }
 
+.pick-mode-banner {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #fff7db;
+  border: 1px solid #f0d284;
+  color: #7a5a00;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .scene-hud,
 .scene-statusbar {
   display: flex;
@@ -322,6 +336,20 @@ button {
 
 .slide-object.is-image {
   background: rgba(255, 255, 255, 0.96);
+}
+
+.slide-object.is-pickable {
+  cursor: pointer;
+  box-shadow: 0 0 0 2px rgba(52, 120, 216, 0.18), 0 16px 28px rgba(21, 33, 50, 0.14);
+}
+
+.slide-object.is-pickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px rgba(52, 120, 216, 0.34), 0 18px 30px rgba(21, 33, 50, 0.16);
+}
+
+.slide-object.is-picked {
+  box-shadow: 0 0 0 3px rgba(52, 120, 216, 0.42), 0 18px 30px rgba(21, 33, 50, 0.16);
 }
 
 .slide-object img,
@@ -867,6 +895,21 @@ button {
 .preview-box {
   display: grid;
   gap: 8px;
+}
+
+.object-pick-box {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d9dde3;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.object-pick-status {
+  margin: 0;
+  color: #5f6875;
+  line-height: 1.6;
 }
 
 .upload-preview {
