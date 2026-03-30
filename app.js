@@ -1,9 +1,13 @@
 const TAB_CONFIG = {
   images: { label: "画像" },
-  objects: { label: "頻出オブジェクト" },
-  favorites: { label: "お気に入り" },
-  user: { label: "ユーザー追加" }
+  objects: { label: "オブジェクト" },
+  user: { label: "ユーザカスタム" }
 };
+
+const BASE_TAB_ORDER = ["images", "objects", "user"];
+const DEFAULT_FAVORITE_TAB_ID = "fav-01";
+const DEFAULT_FAVORITE_TAB_LABEL = "お気に入り";
+const MODAL_RESIZE_EDGE_SIZE = 10;
 
 const OBJECT_TEMPLATE_DEFS = {
   arrow: { label: "矢印", shapeKind: "arrow", fillColor: "#4aa6ff", strokeColor: "#d8edff", text: "Flow" },
@@ -23,13 +27,16 @@ const OBJECT_TEMPLATE_DEFS = {
 const dom = {
   openModalButton: document.getElementById("openModalButton"),
   modalOverlay: document.getElementById("modalOverlay"),
+  modalWindow: document.getElementById("modalWindow"),
+  modalHeader: document.getElementById("modalHeader"),
+  modalResizeHandle: document.getElementById("modalResizeHandle"),
   closeModalButton: document.getElementById("closeModalButton"),
-  tabButtons: Array.from(document.querySelectorAll(".tab-button")),
+  tabRow: document.getElementById("tabRow"),
   searchInput: document.getElementById("searchInput"),
   cardGrid: document.getElementById("cardGrid"),
   emptyState: document.getElementById("emptyState"),
   itemCount: document.getElementById("itemCount"),
-  selectionDetails: document.getElementById("selectionDetails"),
+  renameFavoriteTabButton: document.getElementById("renameFavoriteTabButton"),
   statusMessage: document.getElementById("statusMessage"),
   insertButton: document.getElementById("insertButton"),
   cancelButton: document.getElementById("cancelButton"),
@@ -52,12 +59,276 @@ const dom = {
   slideEmptyState: document.getElementById("slideEmptyState"),
   insertedCountBadge: document.getElementById("insertedCountBadge"),
   latestInsertInfo: document.getElementById("latestInsertInfo"),
-  pickModeBanner: document.getElementById("pickModeBanner")
+  pickModeBanner: document.getElementById("pickModeBanner"),
+  favoriteDialogOverlay: document.getElementById("favoriteDialogOverlay"),
+  closeFavoriteDialogButton: document.getElementById("closeFavoriteDialogButton"),
+  cancelFavoriteDialogButton: document.getElementById("cancelFavoriteDialogButton"),
+  saveFavoriteDialogButton: document.getElementById("saveFavoriteDialogButton"),
+  favoriteDialogDescription: document.getElementById("favoriteDialogDescription"),
+  favoriteTabChecklist: document.getElementById("favoriteTabChecklist")
 };
 
 function setOverlayVisibility(element, visible) {
   element.hidden = !visible;
-  element.style.display = visible ? "grid" : "none";
+  if (!visible) {
+    element.style.display = "none";
+    return;
+  }
+
+  element.style.display = element.classList.contains("modal-overlay") ? "block" : "grid";
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getResizeCursor(direction) {
+  const map = {
+    top: "ns-resize",
+    right: "ew-resize",
+    bottom: "ns-resize",
+    left: "ew-resize",
+    "top-left": "nwse-resize",
+    "bottom-right": "nwse-resize",
+    "top-right": "nesw-resize",
+    "bottom-left": "nesw-resize"
+  };
+  return map[direction] || "";
+}
+
+function getModalResizeDirection(event) {
+  const rect = dom.modalWindow.getBoundingClientRect();
+  const nearLeft = event.clientX - rect.left <= MODAL_RESIZE_EDGE_SIZE;
+  const nearRight = rect.right - event.clientX <= MODAL_RESIZE_EDGE_SIZE;
+  const nearTop = event.clientY - rect.top <= MODAL_RESIZE_EDGE_SIZE;
+  const nearBottom = rect.bottom - event.clientY <= MODAL_RESIZE_EDGE_SIZE;
+
+  if (nearTop && nearLeft) {
+    return "top-left";
+  }
+  if (nearTop && nearRight) {
+    return "top-right";
+  }
+  if (nearBottom && nearLeft) {
+    return "bottom-left";
+  }
+  if (nearBottom && nearRight) {
+    return "bottom-right";
+  }
+  if (nearTop) {
+    return "top";
+  }
+  if (nearRight) {
+    return "right";
+  }
+  if (nearBottom) {
+    return "bottom";
+  }
+  if (nearLeft) {
+    return "left";
+  }
+  return "";
+}
+
+function getModalConstraints() {
+  const maxWidth = Math.max(420, window.innerWidth - 24);
+  const maxHeight = Math.max(320, window.innerHeight - 24);
+
+  return {
+    minWidth: Math.min(620, maxWidth),
+    maxWidth,
+    minHeight: Math.min(420, maxHeight),
+    maxHeight
+  };
+}
+
+function clampModalWindowRect(rect) {
+  const constraints = getModalConstraints();
+  const width = clamp(rect.width, constraints.minWidth, constraints.maxWidth);
+  const height = clamp(rect.height, constraints.minHeight, constraints.maxHeight);
+
+  return {
+    left: clamp(rect.left, 12, window.innerWidth - width - 12),
+    top: clamp(rect.top, 12, window.innerHeight - height - 12),
+    width,
+    height,
+    initialized: true
+  };
+}
+
+function applyModalWindowRect() {
+  const rect = clampModalWindowRect(state.modalWindowRect);
+  state.modalWindowRect = rect;
+  dom.modalWindow.style.left = `${rect.left}px`;
+  dom.modalWindow.style.top = `${rect.top}px`;
+  dom.modalWindow.style.width = `${rect.width}px`;
+  dom.modalWindow.style.height = `${rect.height}px`;
+}
+
+function initializeModalWindowRect(forceReset = false) {
+  if (state.modalWindowRect.initialized && !forceReset) {
+    applyModalWindowRect();
+    return;
+  }
+
+  const constraints = getModalConstraints();
+  const width = Math.min(840, constraints.maxWidth);
+  const height = Math.min(640, constraints.maxHeight);
+  const rect = {
+    left: Math.max(12, window.innerWidth - width - 72),
+    top: Math.max(12, Math.min(118, window.innerHeight - height - 12)),
+    width,
+    height,
+    initialized: true
+  };
+
+  state.modalWindowRect = clampModalWindowRect(rect);
+  applyModalWindowRect();
+}
+
+function stopModalInteraction() {
+  if (!state.modalInteraction) {
+    return;
+  }
+
+  state.modalInteraction = null;
+  document.removeEventListener("pointermove", handleModalInteractionMove);
+  document.removeEventListener("pointerup", stopModalInteraction);
+  document.body.classList.remove("is-dragging-modal", "is-resizing-modal");
+  document.body.style.removeProperty("--modal-resize-cursor");
+  dom.modalWindow.style.cursor = "";
+}
+
+function handleModalInteractionMove(event) {
+  if (!state.modalInteraction) {
+    return;
+  }
+
+  const { mode, startX, startY, startLeft, startTop, startWidth, startHeight, resizeDirection } = state.modalInteraction;
+  const deltaX = event.clientX - startX;
+  const deltaY = event.clientY - startY;
+
+  if (mode === "drag") {
+    state.modalWindowRect = clampModalWindowRect({
+      ...state.modalWindowRect,
+      left: startLeft + deltaX,
+      top: startTop + deltaY,
+      width: startWidth,
+      height: startHeight
+    });
+  } else {
+    const constraints = getModalConstraints();
+    const viewportRight = window.innerWidth - 12;
+    const viewportBottom = window.innerHeight - 12;
+    let left = startLeft;
+    let top = startTop;
+    let right = startLeft + startWidth;
+    let bottom = startTop + startHeight;
+
+    if (resizeDirection.includes("left")) {
+      left = clamp(startLeft + deltaX, 12, right - constraints.minWidth);
+    }
+    if (resizeDirection.includes("right")) {
+      right = clamp(startLeft + startWidth + deltaX, left + constraints.minWidth, viewportRight);
+    }
+    if (resizeDirection.includes("top")) {
+      top = clamp(startTop + deltaY, 12, bottom - constraints.minHeight);
+    }
+    if (resizeDirection.includes("bottom")) {
+      bottom = clamp(startTop + startHeight + deltaY, top + constraints.minHeight, viewportBottom);
+    }
+
+    if (right - left > constraints.maxWidth) {
+      if (resizeDirection.includes("left") && !resizeDirection.includes("right")) {
+        left = right - constraints.maxWidth;
+      } else {
+        right = left + constraints.maxWidth;
+      }
+    }
+
+    if (bottom - top > constraints.maxHeight) {
+      if (resizeDirection.includes("top") && !resizeDirection.includes("bottom")) {
+        top = bottom - constraints.maxHeight;
+      } else {
+        bottom = top + constraints.maxHeight;
+      }
+    }
+
+    state.modalWindowRect = clampModalWindowRect({
+      ...state.modalWindowRect,
+      left,
+      top,
+      width: right - left,
+      height: bottom - top
+    });
+  }
+
+  applyModalWindowRect();
+}
+
+function beginModalInteraction(mode, event, resizeDirection = "") {
+  if (mode === "drag" && event.target.closest("button, input, select, textarea")) {
+    return;
+  }
+
+  event.preventDefault();
+  const rect = dom.modalWindow.getBoundingClientRect();
+  state.modalInteraction = {
+    mode,
+    startX: event.clientX,
+    startY: event.clientY,
+    startLeft: rect.left,
+    startTop: rect.top,
+    startWidth: rect.width,
+    startHeight: rect.height,
+    resizeDirection
+  };
+
+  document.addEventListener("pointermove", handleModalInteractionMove);
+  document.addEventListener("pointerup", stopModalInteraction);
+  document.body.classList.add(mode === "drag" ? "is-dragging-modal" : "is-resizing-modal");
+  if (mode === "resize") {
+    const resizeCursor = getResizeCursor(resizeDirection);
+    document.body.style.setProperty("--modal-resize-cursor", resizeCursor);
+    dom.modalWindow.style.cursor = resizeCursor;
+  }
+}
+
+function handleModalWindowPointerMove(event) {
+  if (state.modalInteraction) {
+    return;
+  }
+
+  const resizeDirection = getModalResizeDirection(event);
+  dom.modalWindow.style.cursor = getResizeCursor(resizeDirection);
+}
+
+function handleModalWindowPointerLeave() {
+  if (!state.modalInteraction) {
+    dom.modalWindow.style.cursor = "";
+  }
+}
+
+function handleModalWindowPointerDown(event) {
+  if (event.target.closest("#modalResizeHandle")) {
+    return;
+  }
+
+  const resizeDirection = getModalResizeDirection(event);
+  if (!resizeDirection) {
+    return;
+  }
+
+  event.stopPropagation();
+  beginModalInteraction("resize", event, resizeDirection);
+}
+
+function handleWindowResize() {
+  if (!state.modalWindowRect.initialized) {
+    return;
+  }
+
+  applyModalWindowRect();
 }
 
 function svgToDataUri(svgMarkup) {
@@ -71,6 +342,51 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function createFavoriteTab(id, label) {
+  return { id, label };
+}
+
+function getFavoriteTabKey(favoriteTabId) {
+  return `favorite:${favoriteTabId}`;
+}
+
+function isFavoriteTabKey(tab) {
+  return typeof tab === "string" && tab.startsWith("favorite:");
+}
+
+function getFavoriteTabIdFromKey(tab) {
+  return isFavoriteTabKey(tab) ? tab.slice("favorite:".length) : null;
+}
+
+function getFavoriteTabById(favoriteTabId) {
+  return state.favoriteTabs.find((tab) => tab.id === favoriteTabId) || null;
+}
+
+function normalizeFavoriteTabIds(favoriteTabIds = []) {
+  return [...new Set(favoriteTabIds.filter(Boolean))];
+}
+
+function setItemFavoriteTabs(item, favoriteTabIds) {
+  item.favoriteTabIds = normalizeFavoriteTabIds(favoriteTabIds);
+  item.favorite = item.favoriteTabIds.length > 0;
+}
+
+function getTabLabel(tab) {
+  if (TAB_CONFIG[tab]) {
+    return TAB_CONFIG[tab].label;
+  }
+
+  const favoriteTab = getFavoriteTabById(getFavoriteTabIdFromKey(tab) || tab);
+  return favoriteTab ? favoriteTab.label : "";
+}
+
+function getFavoriteTabLabelsForItem(item) {
+  return item.favoriteTabIds
+    .map((favoriteTabId) => getFavoriteTabById(favoriteTabId))
+    .filter(Boolean)
+    .map((favoriteTab) => favoriteTab.label);
 }
 
 function getTypeLabel(type) {
@@ -238,11 +554,16 @@ function createObjectSvg(templateType, overrides = {}) {
 }
 
 function createImageItem(config) {
+  const favoriteTabIds = normalizeFavoriteTabIds(
+    config.favoriteTabIds || (config.favorite ? [DEFAULT_FAVORITE_TAB_ID] : [])
+  );
+
   return {
     id: config.id,
     name: config.name,
     type: "image",
-    favorite: Boolean(config.favorite),
+    favorite: favoriteTabIds.length > 0,
+    favoriteTabIds,
     sourceTab: config.sourceTab,
     source: config.sourceTab,
     preview: {
@@ -266,11 +587,16 @@ function createImageItem(config) {
 }
 
 function createEditableItem(config) {
+  const favoriteTabIds = normalizeFavoriteTabIds(
+    config.favoriteTabIds || (config.favorite ? [DEFAULT_FAVORITE_TAB_ID] : [])
+  );
+
   return {
     id: config.id,
     name: config.name,
     type: "editableObject",
-    favorite: Boolean(config.favorite),
+    favorite: favoriteTabIds.length > 0,
+    favoriteTabIds,
     sourceTab: config.sourceTab,
     source: config.sourceTab,
     preview: {
@@ -321,7 +647,7 @@ function createEditableTemplateItem(id, name, templateType, text, sourceTab = "o
       layoutHint: `${base.label}レイアウト`
     },
     editableProps,
-    keywords: [base.label, text, sourceTab === "user" ? "ユーザー追加" : "頻出オブジェクト"]
+    keywords: [base.label, text, sourceTab === "user" ? "ユーザカスタム" : "オブジェクト"]
   });
 }
 
@@ -407,14 +733,28 @@ const state = {
   searchQuery: "",
   selectedItemIds: [],
   insertedItems: [],
+  favoriteTabs: [createFavoriteTab(DEFAULT_FAVORITE_TAB_ID, DEFAULT_FAVORITE_TAB_LABEL)],
   pickedSlideItemId: null,
+  editingItemId: null,
+  nameEditDraft: "",
+  modalWindowRect: {
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+    initialized: false
+  },
+  modalInteraction: null,
   modalOpen: false,
   addDialogOpen: false,
+  favoriteDialogOpen: false,
   objectPickMode: false,
+  nextFavoriteTabId: 2,
   nextUserId: 4,
   nextInsertedId: 1,
   pendingUpload: null,
   pendingObjectSource: null,
+  favoriteDialogItemId: null,
   collections: {
     images: createSampleImages(),
     objects: createSampleObjects(),
@@ -436,19 +776,23 @@ function findItemById(id) {
 }
 
 function getItemsForTab(tab) {
-  if (tab === "favorites") {
-    return getAllItems().filter((item) => item.favorite);
-  }
   if (tab === "images") {
     return state.collections.images;
   }
   if (tab === "objects") {
     return state.collections.objects;
   }
-  return [
-    ...state.collections.user.images,
-    ...state.collections.user.editableObjects
-  ];
+  if (tab === "user") {
+    return [
+      ...state.collections.user.images,
+      ...state.collections.user.editableObjects
+    ];
+  }
+  if (isFavoriteTabKey(tab)) {
+    const favoriteTabId = getFavoriteTabIdFromKey(tab);
+    return getAllItems().filter((item) => item.favoriteTabIds.includes(favoriteTabId));
+  }
+  return [];
 }
 
 function getFilteredItems() {
@@ -474,9 +818,14 @@ function buildSearchableText(item) {
 
 function clearSelection() {
   state.selectedItemIds = [];
+  state.editingItemId = null;
+  state.nameEditDraft = "";
 }
 
 function setActiveTab(tab) {
+  if (!TAB_CONFIG[tab] && !isFavoriteTabKey(tab)) {
+    return;
+  }
   state.activeTab = tab;
   state.searchQuery = "";
   clearSelection();
@@ -490,33 +839,152 @@ function setSearchQuery(value) {
   render();
 }
 
-function setCardSelection(itemId, additive = false) {
-  if (additive) {
-    if (isItemSelected(itemId)) {
-      state.selectedItemIds = state.selectedItemIds.filter((id) => id !== itemId);
-    } else {
-      state.selectedItemIds = [...state.selectedItemIds, itemId];
-    }
+function toggleCardSelection(itemId) {
+  if (isItemSelected(itemId)) {
+    state.selectedItemIds = state.selectedItemIds.filter((id) => id !== itemId);
   } else {
-    state.selectedItemIds = [itemId];
+    state.selectedItemIds = [...state.selectedItemIds, itemId];
   }
+
+  if (state.selectedItemIds.length !== 1 || state.selectedItemIds[0] !== state.editingItemId) {
+    state.editingItemId = null;
+    state.nameEditDraft = "";
+  }
+
   render();
 }
 
-function toggleFavorite(itemId) {
+function buildFavoriteTabDefaultLabel() {
+  if (!state.favoriteTabs.some((favoriteTab) => favoriteTab.label === DEFAULT_FAVORITE_TAB_LABEL)) {
+    return DEFAULT_FAVORITE_TAB_LABEL;
+  }
+
+  let index = 2;
+  let candidate = `お気に入り ${index}`;
+  while (state.favoriteTabs.some((favoriteTab) => favoriteTab.label === candidate)) {
+    index += 1;
+    candidate = `お気に入り ${index}`;
+  }
+
+  return candidate;
+}
+
+function hasFavoriteTabLabel(label, ignoredFavoriteTabId = null) {
+  return state.favoriteTabs.some((favoriteTab) =>
+    favoriteTab.id !== ignoredFavoriteTabId && favoriteTab.label === label
+  );
+}
+
+function requestFavoriteTabLabel(initialValue, ignoredFavoriteTabId = null) {
+  let draft = initialValue;
+
+  while (true) {
+    const nextLabel = window.prompt("お気に入りタブ名を入力してください。", draft);
+    if (nextLabel === null) {
+      return null;
+    }
+
+    const trimmed = nextLabel.trim();
+    if (!trimmed) {
+      window.alert("タブ名を入力してください。");
+      draft = initialValue;
+      continue;
+    }
+
+    if (hasFavoriteTabLabel(trimmed, ignoredFavoriteTabId)) {
+      window.alert("同じ名前のタブは使えません。");
+      draft = trimmed;
+      continue;
+    }
+
+    return trimmed;
+  }
+}
+
+function promptRenameFavoriteTab(favoriteTabId) {
+  const favoriteTab = getFavoriteTabById(favoriteTabId);
+  if (!favoriteTab) {
+    return;
+  }
+
+  const nextLabel = requestFavoriteTabLabel(favoriteTab.label, favoriteTab.id);
+  if (nextLabel === null) {
+    return;
+  }
+
+  favoriteTab.label = nextLabel;
+  render();
+}
+
+function renameActiveFavoriteTab() {
+  if (!isFavoriteTabKey(state.activeTab)) {
+    return;
+  }
+
+  const favoriteTabId = getFavoriteTabIdFromKey(state.activeTab);
+  if (favoriteTabId) {
+    promptRenameFavoriteTab(favoriteTabId);
+  }
+}
+
+function addFavoriteTab() {
+  const nextLabel = requestFavoriteTabLabel(buildFavoriteTabDefaultLabel());
+  if (nextLabel === null) {
+    return;
+  }
+
+  const favoriteTabId = `fav-${String(state.nextFavoriteTabId).padStart(2, "0")}`;
+  state.nextFavoriteTabId += 1;
+  state.favoriteTabs.push(createFavoriteTab(favoriteTabId, nextLabel));
+  setActiveTab(getFavoriteTabKey(favoriteTabId));
+}
+
+function openFavoriteDialog(itemId) {
   const item = findItemById(itemId);
   if (!item) {
     return;
   }
-  item.favorite = !item.favorite;
-  if (state.activeTab === "favorites" && !item.favorite) {
-    state.selectedItemIds = state.selectedItemIds.filter((id) => id !== itemId);
+
+  state.favoriteDialogItemId = itemId;
+  state.favoriteDialogOpen = true;
+  setOverlayVisibility(dom.favoriteDialogOverlay, true);
+  renderFavoriteDialog();
+}
+
+function closeFavoriteDialog() {
+  state.favoriteDialogOpen = false;
+  state.favoriteDialogItemId = null;
+  setOverlayVisibility(dom.favoriteDialogOverlay, false);
+  dom.favoriteDialogDescription.textContent = "";
+  dom.favoriteTabChecklist.innerHTML = "";
+}
+
+function saveFavoriteDialog() {
+  const item = findItemById(state.favoriteDialogItemId);
+  if (!item) {
+    closeFavoriteDialog();
+    return;
   }
+
+  const favoriteTabIds = Array.from(
+    dom.favoriteTabChecklist.querySelectorAll("input[type='checkbox']:checked")
+  ).map((input) => input.dataset.favoriteTabId);
+
+  setItemFavoriteTabs(item, favoriteTabIds);
+
+  if (isFavoriteTabKey(state.activeTab)) {
+    const activeFavoriteTabId = getFavoriteTabIdFromKey(state.activeTab);
+    if (!item.favoriteTabIds.includes(activeFavoriteTabId)) {
+      state.selectedItemIds = state.selectedItemIds.filter((id) => id !== item.id);
+    }
+  }
+
+  closeFavoriteDialog();
   render();
 }
 
 function deleteUserItem(itemId) {
-  if (!window.confirm("このユーザー追加アイテムを削除しますか？")) {
+  if (!window.confirm("このユーザカスタムアイテムを削除しますか？")) {
     return;
   }
   state.collections.user.images = state.collections.user.images.filter((item) => item.id !== itemId);
@@ -525,7 +993,72 @@ function deleteUserItem(itemId) {
   render();
 }
 
+function startInlineNameEdit(itemId) {
+  const item = findItemById(itemId);
+  if (!item) {
+    return;
+  }
+
+  state.editingItemId = itemId;
+  state.nameEditDraft = item.name;
+  render();
+
+  requestAnimationFrame(() => {
+    const input = dom.selectionDetails.querySelector("[data-role='name-edit-input']");
+    if (!input) {
+      return;
+    }
+    input.focus();
+    input.select();
+  });
+}
+
+function cancelInlineNameEdit() {
+  if (!state.editingItemId) {
+    return;
+  }
+
+  state.editingItemId = null;
+  state.nameEditDraft = "";
+  render();
+}
+
+function updateInlineNameDraft(value) {
+  state.nameEditDraft = value;
+
+  const saveButton = dom.selectionDetails.querySelector("[data-action='save-name-edit']");
+  if (saveButton) {
+    saveButton.disabled = value.trim().length === 0;
+  }
+}
+
+function commitInlineNameEdit() {
+  if (!state.editingItemId) {
+    return;
+  }
+
+  const item = findItemById(state.editingItemId);
+  if (!item) {
+    cancelInlineNameEdit();
+    return;
+  }
+
+  const trimmed = state.nameEditDraft.trim();
+  if (!trimmed) {
+    return;
+  }
+
+  item.name = trimmed;
+  item.searchableText = buildSearchableText(item);
+  state.editingItemId = null;
+  state.nameEditDraft = "";
+  render();
+}
+
 function renameItem(itemId) {
+  startInlineNameEdit(itemId);
+  return;
+
   const item = findItemById(itemId);
   if (!item) {
     return;
@@ -550,6 +1083,7 @@ function renameItem(itemId) {
 function openModal() {
   state.modalOpen = true;
   setOverlayVisibility(dom.modalOverlay, true);
+  initializeModalWindowRect();
   document.body.style.overflow = "hidden";
   render();
 }
@@ -558,11 +1092,13 @@ function closeModal() {
   if (state.objectPickMode) {
     stopObjectPickMode(false);
   }
+  stopModalInteraction();
   state.modalOpen = false;
   clearSelection();
   state.searchQuery = "";
   dom.searchInput.value = "";
   setOverlayVisibility(dom.modalOverlay, false);
+  closeFavoriteDialog();
   closeAddDialog();
   document.body.style.overflow = "";
 }
@@ -680,7 +1216,7 @@ function createUserItemFromForm() {
       fileName: state.pendingUpload.fileName,
       mimeType: state.pendingUpload.mimeType,
       palette: ["uploaded", "uploaded"],
-      keywords: ["ユーザー追加", name]
+      keywords: ["ユーザカスタム", name]
     });
   }
 
@@ -710,7 +1246,7 @@ function createUserItemFromForm() {
       strokeColor: source.dataSummary.strokeColor || "#dbe9ff",
       text: source.dataSummary.text || name
     },
-    keywords: ["ユーザー追加", "スライド選択", name]
+    keywords: ["ユーザカスタム", "スライド選択", name]
   });
 }
 
@@ -736,6 +1272,7 @@ function buildInsertPayload(item) {
     sourceTab: item.sourceTab,
     type: item.type,
     favorite: item.favorite,
+    favoriteTabIds: [...item.favoriteTabIds],
     preview: item.preview
   };
 
@@ -789,6 +1326,7 @@ function createInsertedSlideItem(item, payload) {
     type: item.type,
     sourceTab: item.sourceTab,
     favorite: item.favorite,
+    favoriteTabIds: [...item.favoriteTabIds],
     placement,
     preview: payload.preview,
     dataSummary: payload.dataSummary
@@ -821,7 +1359,7 @@ function renderSlideItems() {
   dom.latestInsertInfo.innerHTML = `
     <strong>${escapeHtml(latest.name)}</strong><br>
     種別: ${getTypeLabel(latest.type)}<br>
-    元タブ: ${TAB_CONFIG[latest.sourceTab].label}
+    元タブ: ${getTabLabel(latest.sourceTab)}
   `;
 }
 
@@ -862,14 +1400,18 @@ function renderCard(item) {
   const typeLabel = getTypeLabel(item.type);
   const isSelected = isItemSelected(item.id);
   const favoriteClass = item.favorite ? "favorite-button is-active" : "favorite-button";
+  const favoriteAriaLabel = item.favorite ? "お気に入り先を変更" : "お気に入りに登録";
+  const selectionClass = isSelected ? "selection-toggle is-selected" : "selection-toggle";
+  const selectionAriaLabel = isSelected ? `${item.name} の選択を解除` : `${item.name} を選択`;
   const deleteButton = state.activeTab === "user"
     ? `<button class="delete-button" data-action="delete" data-id="${item.id}" type="button" aria-label="削除">×</button>`
     : "";
 
   return `
-    <article class="asset-card ${isSelected ? "is-selected" : ""}" data-id="${item.id}" tabindex="0">
+    <article class="asset-card ${isSelected ? "is-selected" : ""}" data-id="${item.id}">
       <div class="card-actions">
-        <button class="${favoriteClass}" data-action="favorite" data-id="${item.id}" type="button" aria-label="お気に入り">★</button>
+        <button class="${selectionClass}" data-action="select-card" data-id="${item.id}" type="button" aria-pressed="${isSelected ? "true" : "false"}" aria-label="${escapeHtml(selectionAriaLabel)}">✓</button>
+        <button class="${favoriteClass}" data-action="favorite" data-id="${item.id}" type="button" aria-label="${favoriteAriaLabel}">★</button>
         ${deleteButton}
       </div>
       <div class="asset-preview">${renderPreviewMarkup(item.preview)}</div>
@@ -886,19 +1428,23 @@ function renderCard(item) {
 function renderCards() {
   const items = getFilteredItems();
   dom.itemCount.textContent = `${items.length}件`;
-  dom.addUserItemButton.hidden = state.activeTab !== "user";
 
   if (items.length === 0) {
     dom.cardGrid.innerHTML = "";
     dom.emptyState.hidden = false;
-    dom.emptyState.textContent = state.activeTab === "favorites" && !state.searchQuery
-      ? "お気に入りがありません"
+    dom.emptyState.textContent = isFavoriteTabKey(state.activeTab) && !state.searchQuery
+      ? "このお気に入りタブにはまだ登録がありません"
       : "該当する項目がありません";
     return;
   }
 
   dom.emptyState.hidden = true;
   dom.cardGrid.innerHTML = items.map(renderCard).join("");
+}
+
+function renderToolbarState() {
+  dom.addUserItemButton.hidden = state.activeTab !== "user";
+  dom.renameFavoriteTabButton.hidden = !isFavoriteTabKey(state.activeTab);
 }
 
 function renderSelectionDetails() {
@@ -931,6 +1477,7 @@ function renderSelectionDetails() {
   const [item] = items;
 
   const typeLabel = getTypeLabel(item.type);
+  const favoriteLabels = getFavoriteTabLabelsForItem(item);
   const summaryMarkup = item.type === "image"
     ? `
       <div class="detail-row">
@@ -973,12 +1520,119 @@ function renderSelectionDetails() {
         <strong>${typeLabel}</strong>
       </div>
       <div class="detail-row">
-        <span>sourceTab</span>
-        <strong>${TAB_CONFIG[item.sourceTab].label}</strong>
+        <span>元タブ</span>
+        <strong>${getTabLabel(item.sourceTab)}</strong>
       </div>
       <div class="detail-row">
         <span>お気に入り</span>
-        <strong>${item.favorite ? "登録済み" : "未登録"}</strong>
+        <strong>${favoriteLabels.length > 0 ? escapeHtml(favoriteLabels.join(" / ")) : "未登録"}</strong>
+      </div>
+      ${summaryMarkup}
+    </div>
+  `;
+}
+
+function renderSelectionDetailsInline() {
+  const items = state.selectedItemIds
+    .map((id) => findItemById(id))
+    .filter(Boolean);
+
+  if (items.length === 0) {
+    dom.selectionDetails.innerHTML = `
+      <p class="detail-placeholder">未選択です。カードを選ぶとここに概要が表示されます。</p>
+    `;
+    return;
+  }
+
+  if (items.length > 1) {
+    dom.selectionDetails.innerHTML = `
+      <h3 class="detail-title">${items.length}件を選択中</h3>
+      <div class="detail-list">
+        ${items.map((item) => `
+          <div class="detail-row">
+            <span>${getTypeLabel(item.type)}</span>
+            <strong>${escapeHtml(item.name)}</strong>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    return;
+  }
+
+  const [item] = items;
+  const typeLabel = getTypeLabel(item.type);
+  const isEditingName = state.editingItemId === item.id;
+  const favoriteLabels = getFavoriteTabLabelsForItem(item);
+  const summaryMarkup = item.type === "image"
+    ? `
+      <div class="detail-row">
+        <span>画像情報</span>
+        <strong>${escapeHtml(item.fileName)}</strong>
+      </div>
+      <div class="detail-row">
+        <span>imageKind</span>
+        <strong>${escapeHtml(item.imageKind)}</strong>
+      </div>
+      <div class="detail-row">
+        <span>mimeType</span>
+        <strong>${escapeHtml(item.mimeType)}</strong>
+      </div>
+    `
+    : `
+      <div class="detail-row">
+        <span>templateType</span>
+        <strong>${escapeHtml(item.templateType)}</strong>
+      </div>
+      <div class="detail-row">
+        <span>shapeKind</span>
+        <strong>${escapeHtml(item.objectDefinition.shapeKind)}</strong>
+      </div>
+      <div class="detail-row">
+        <span>editableProps</span>
+        <strong class="detail-code">${escapeHtml(JSON.stringify(item.editableProps, null, 2))}</strong>
+      </div>
+    `;
+
+  const titleMarkup = isEditingName
+    ? `
+      <div class="detail-title-row">
+        <div class="detail-name-editor">
+          <input
+            class="detail-name-input"
+            data-role="name-edit-input"
+            type="text"
+            value="${escapeHtml(state.nameEditDraft)}"
+            maxlength="40"
+          >
+          <div class="detail-inline-actions">
+            <button class="detail-edit-button" data-action="save-name-edit" type="button" ${state.nameEditDraft.trim() ? "" : "disabled"}>保存</button>
+            <button class="detail-edit-button is-secondary" data-action="cancel-name-edit" type="button">キャンセル</button>
+          </div>
+        </div>
+      </div>
+    `
+    : `
+      <div class="detail-title-row">
+        <h3 class="detail-title">${escapeHtml(item.name)}</h3>
+        <button class="detail-edit-button" data-action="edit-selected" data-id="${item.id}" type="button">編集</button>
+      </div>
+    `;
+
+  dom.selectionDetails.innerHTML = `
+    <div class="detail-preview">${renderPreviewMarkup(item.preview)}</div>
+    ${titleMarkup}
+    <div class="detail-list">
+      <div class="detail-row">
+        <span>種別</span>
+        <strong>${typeLabel}</strong>
+      </div>
+      <div class="detail-row">
+        <span>元タブ</span>
+        <strong>${getTabLabel(item.sourceTab)}</strong>
+      </div>
+      <div class="detail-row">
+        <span>お気に入り</span>
+        <strong>${favoriteLabels.length > 0 ? escapeHtml(favoriteLabels.join(" / ")) : "未登録"}</strong>
       </div>
       ${summaryMarkup}
     </div>
@@ -1003,9 +1657,61 @@ function renderFooterState() {
 }
 
 function renderTabs() {
-  dom.tabButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.tab === state.activeTab);
+  const baseTabs = BASE_TAB_ORDER.map((tab) => `
+    <button
+      class="tab-button ${state.activeTab === tab ? "is-active" : ""}"
+      data-action="select-tab"
+      data-tab="${tab}"
+      type="button"
+    >
+      ${escapeHtml(getTabLabel(tab))}
+    </button>
+  `);
+
+  const favoriteTabs = state.favoriteTabs.map((favoriteTab) => {
+    const favoriteTabKey = getFavoriteTabKey(favoriteTab.id);
+    return `
+      <button
+        class="tab-button ${state.activeTab === favoriteTabKey ? "is-active" : ""}"
+        data-action="select-tab"
+        data-tab="${favoriteTabKey}"
+        type="button"
+      >
+        ${escapeHtml(favoriteTab.label)}
+      </button>
+    `;
   });
+
+  dom.tabRow.innerHTML = `
+    ${baseTabs.join("")}
+    ${favoriteTabs.join("")}
+    <button class="tab-add-button" data-action="add-favorite-tab" type="button" aria-label="お気に入りタブを追加">＋</button>
+  `;
+}
+
+function renderFavoriteDialog() {
+  if (!state.favoriteDialogOpen) {
+    return;
+  }
+
+  const item = findItemById(state.favoriteDialogItemId);
+  if (!item) {
+    closeFavoriteDialog();
+    return;
+  }
+
+  dom.favoriteDialogDescription.textContent = `「${item.name}」を登録するお気に入りタブを選択してください。`;
+  dom.favoriteTabChecklist.innerHTML = state.favoriteTabs.map((favoriteTab) => `
+    <label class="favorite-tab-option">
+      <input
+        type="checkbox"
+        data-favorite-tab-id="${favoriteTab.id}"
+        ${item.favoriteTabIds.includes(favoriteTab.id) ? "checked" : ""}
+      >
+      <span>${escapeHtml(favoriteTab.label)}</span>
+    </label>
+  `).join("");
+  dom.saveFavoriteDialogButton.textContent = item.favorite ? "更新する" : "登録する";
 }
 
 function renderObjectPreviewForDialog() {
@@ -1023,17 +1729,38 @@ function renderObjectPreviewForDialog() {
 
 function render() {
   renderTabs();
+  renderToolbarState();
   renderCards();
-  renderSelectionDetails();
   renderFooterState();
   renderSlideItems();
+  renderFavoriteDialog();
+}
+
+function handleTabRowClick(event) {
+  const addButton = event.target.closest("[data-action='add-favorite-tab']");
+  if (addButton) {
+    addFavoriteTab();
+    return;
+  }
+
+  const tabButton = event.target.closest("[data-action='select-tab']");
+  if (tabButton) {
+    setActiveTab(tabButton.dataset.tab);
+  }
 }
 
 function handleGridClick(event) {
+  const selectButton = event.target.closest("[data-action='select-card']");
+  if (selectButton) {
+    event.stopPropagation();
+    toggleCardSelection(selectButton.dataset.id);
+    return;
+  }
+
   const favoriteButton = event.target.closest("[data-action='favorite']");
   if (favoriteButton) {
     event.stopPropagation();
-    toggleFavorite(favoriteButton.dataset.id);
+    openFavoriteDialog(favoriteButton.dataset.id);
     return;
   }
 
@@ -1043,31 +1770,48 @@ function handleGridClick(event) {
     deleteUserItem(deleteButton.dataset.id);
     return;
   }
-
-  const card = event.target.closest(".asset-card");
-  if (card) {
-    setCardSelection(card.dataset.id, event.ctrlKey || event.metaKey);
-  }
-}
-
-function handleGridKeydown(event) {
-  if (event.key !== "Enter" && event.key !== " ") {
-    return;
-  }
-  const card = event.target.closest(".asset-card");
-  if (!card) {
-    return;
-  }
-  event.preventDefault();
-  setCardSelection(card.dataset.id, event.ctrlKey || event.metaKey);
 }
 
 function handleSelectionDetailsClick(event) {
   const editButton = event.target.closest("[data-action='edit-selected']");
-  if (!editButton) {
+  if (editButton) {
+    startInlineNameEdit(editButton.dataset.id);
     return;
   }
-  renameItem(editButton.dataset.id);
+
+  const saveButton = event.target.closest("[data-action='save-name-edit']");
+  if (saveButton) {
+    commitInlineNameEdit();
+    return;
+  }
+
+  const cancelButton = event.target.closest("[data-action='cancel-name-edit']");
+  if (cancelButton) {
+    cancelInlineNameEdit();
+  }
+}
+
+function handleSelectionDetailsInput(event) {
+  if (event.target.matches("[data-role='name-edit-input']")) {
+    updateInlineNameDraft(event.target.value);
+  }
+}
+
+function handleSelectionDetailsKeydown(event) {
+  if (!event.target.matches("[data-role='name-edit-input']")) {
+    return;
+  }
+
+  if (event.key === "Enter") {
+    event.preventDefault();
+    commitInlineNameEdit();
+    return;
+  }
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    cancelInlineNameEdit();
+  }
 }
 
 function handleImageFileChange(event) {
@@ -1115,22 +1859,32 @@ function bindEvents() {
   dom.closeModalButton.addEventListener("click", closeModal);
   dom.cancelButton.addEventListener("click", closeModal);
   dom.addUserItemButton.addEventListener("click", openAddDialog);
+  dom.renameFavoriteTabButton.addEventListener("click", renameActiveFavoriteTab);
   dom.closeAddDialogButton.addEventListener("click", closeAddDialog);
   dom.cancelAddDialogButton.addEventListener("click", closeAddDialog);
+  dom.closeFavoriteDialogButton.addEventListener("click", closeFavoriteDialog);
+  dom.cancelFavoriteDialogButton.addEventListener("click", closeFavoriteDialog);
+  dom.saveFavoriteDialogButton.addEventListener("click", saveFavoriteDialog);
 
-  dom.tabButtons.forEach((button) => {
-    button.addEventListener("click", () => setActiveTab(button.dataset.tab));
-  });
-
+  dom.tabRow.addEventListener("click", handleTabRowClick);
   dom.searchInput.addEventListener("input", (event) => setSearchQuery(event.target.value));
   dom.insertButton.addEventListener("click", insertSelectedItem);
   dom.cardGrid.addEventListener("click", handleGridClick);
-  dom.cardGrid.addEventListener("keydown", handleGridKeydown);
-  dom.selectionDetails.addEventListener("click", handleSelectionDetailsClick);
+  dom.modalWindow.addEventListener("pointermove", handleModalWindowPointerMove);
+  dom.modalWindow.addEventListener("pointerleave", handleModalWindowPointerLeave);
+  dom.modalWindow.addEventListener("pointerdown", handleModalWindowPointerDown);
+  dom.modalHeader.addEventListener("pointerdown", (event) => {
+    if (getModalResizeDirection(event)) {
+      return;
+    }
+    beginModalInteraction("drag", event);
+  });
+  dom.modalResizeHandle.addEventListener("pointerdown", (event) => beginModalInteraction("resize", event, "bottom-right"));
   dom.itemTypeSelect.addEventListener("change", updateAddDialogType);
   dom.imageFileInput.addEventListener("change", handleImageFileChange);
   dom.pickSlideObjectButton.addEventListener("click", startObjectPickMode);
   dom.slideObjectLayer.addEventListener("click", handleSlideObjectClick);
+  window.addEventListener("resize", handleWindowResize);
 
   dom.addItemForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1153,7 +1907,17 @@ function bindEvents() {
     }
   });
 
+  dom.favoriteDialogOverlay.addEventListener("click", (event) => {
+    if (event.target === dom.favoriteDialogOverlay) {
+      closeFavoriteDialog();
+    }
+  });
+
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.favoriteDialogOpen) {
+      closeFavoriteDialog();
+      return;
+    }
     if (event.key === "Escape" && state.objectPickMode) {
       stopObjectPickMode(true);
       return;
@@ -1171,6 +1935,7 @@ function bindEvents() {
 function init() {
   setOverlayVisibility(dom.modalOverlay, false);
   setOverlayVisibility(dom.addDialogOverlay, false);
+  setOverlayVisibility(dom.favoriteDialogOverlay, false);
   bindEvents();
   renderObjectPreviewForDialog();
   render();
