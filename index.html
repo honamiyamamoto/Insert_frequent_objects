@@ -97,6 +97,7 @@
         <div class="toolbar-side">
           <span id="itemCount" class="item-count">0件</span>
           <button id="renameFavoriteTabButton" class="secondary-button" type="button" hidden>タブ名を変更</button>
+          <button id="deleteFavoriteTabButton" class="secondary-button danger-button" type="button" hidden>タブを削除</button>
           <button id="addUserItemButton" class="secondary-button" type="button" hidden>追加</button>
         </div>
       </section>
@@ -110,6 +111,7 @@
         <p id="statusMessage" class="status-message">挿入する項目を選ぶと、「挿入」が有効になります。</p>
         <div class="footer-actions">
           <button id="cancelButton" class="ghost-button" type="button">キャンセル</button>
+          <button id="deleteSelectedButton" class="secondary-button danger-button" type="button" hidden>削除</button>
           <button id="insertButton" class="primary-button" type="button" disabled>挿入</button>
         </div>
       </footer>
@@ -190,6 +192,29 @@
       <div class="dialog-actions">
         <button id="cancelFavoriteDialogButton" class="ghost-button" type="button">キャンセル</button>
         <button id="saveFavoriteDialogButton" class="primary-button" type="button">登録する</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="customDialogOverlay" class="dialog-overlay" hidden>
+    <section class="custom-dialog" role="dialog" aria-modal="true" aria-labelledby="customDialogTitle">
+      <header class="dialog-header">
+        <h3 id="customDialogTitle">確認</h3>
+        <button id="closeCustomDialogButton" class="icon-button" type="button" aria-label="閉じる">×</button>
+      </header>
+
+      <div class="custom-dialog-body">
+        <p id="customDialogDescription" class="custom-dialog-copy"></p>
+        <label id="customDialogField" class="custom-dialog-field" hidden>
+          <span class="visually-hidden">入力欄</span>
+          <input id="customDialogInput" type="text" maxlength="40" autocomplete="off">
+        </label>
+        <p id="customDialogError" class="custom-dialog-error" hidden></p>
+      </div>
+
+      <div class="dialog-actions">
+        <button id="cancelCustomDialogButton" class="ghost-button" type="button">キャンセル</button>
+        <button id="confirmCustomDialogButton" class="primary-button" type="button">OK</button>
       </div>
     </section>
   </div>

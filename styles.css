@@ -469,6 +469,16 @@ button {
   background: #f5f7fa;
 }
 
+.danger-button {
+  color: #b23342;
+  border-color: #efc6cc;
+  background: #fff7f8;
+}
+
+.danger-button:hover {
+  background: #ffecef;
+}
+
 .icon-button {
   width: 40px;
   height: 40px;
@@ -757,11 +767,27 @@ button {
 .card-actions {
   position: absolute;
   top: 12px;
+  left: 12px;
   right: 12px;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  min-height: 34px;
+  pointer-events: none;
+}
+
+.card-action-left,
+.card-action-right {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.card-action-left {
+  top: 0;
+  left: 0;
+}
+
+.card-action-right {
+  top: 0;
+  right: 0;
 }
 
 .selection-toggle,
@@ -1034,6 +1060,15 @@ body.is-resizing-modal * {
   box-shadow: var(--shadow);
 }
 
+.custom-dialog {
+  width: min(460px, 100%);
+  padding: 22px;
+  border: 1px solid #d9dde3;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+  box-shadow: var(--shadow);
+}
+
 .dialog-header h3 {
   margin: 0;
   font-size: 22px;
@@ -1051,10 +1086,59 @@ body.is-resizing-modal * {
   margin-top: 18px;
 }
 
+.custom-dialog-body {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
 .favorite-dialog-copy {
   margin: 0;
   color: #5f6875;
   line-height: 1.7;
+}
+
+.custom-dialog-copy {
+  margin: 0;
+  color: #5f6875;
+  line-height: 1.7;
+}
+
+.custom-dialog-field {
+  display: grid;
+}
+
+.custom-dialog-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid #cfd5dd;
+  border-radius: 10px;
+  color: #202124;
+  background: #ffffff;
+}
+
+.custom-dialog-field input:focus {
+  outline: 0;
+  border-color: #4d88d8;
+  box-shadow: 0 0 0 3px rgba(77, 136, 216, 0.16);
+}
+
+.custom-dialog-error {
+  margin: 0;
+  color: #b23342;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.custom-dialog-confirm.is-danger {
+  color: #b23342;
+  border-color: #efc6cc;
+  background: #fff7f8;
+}
+
+.custom-dialog-confirm.is-danger:hover {
+  background: #ffecef;
 }
 
 .favorite-tab-checklist {

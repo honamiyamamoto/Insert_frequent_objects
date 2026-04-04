@@ -37,8 +37,10 @@ const dom = {
   emptyState: document.getElementById("emptyState"),
   itemCount: document.getElementById("itemCount"),
   renameFavoriteTabButton: document.getElementById("renameFavoriteTabButton"),
+  deleteFavoriteTabButton: document.getElementById("deleteFavoriteTabButton"),
   statusMessage: document.getElementById("statusMessage"),
   insertButton: document.getElementById("insertButton"),
+  deleteSelectedButton: document.getElementById("deleteSelectedButton"),
   cancelButton: document.getElementById("cancelButton"),
   addUserItemButton: document.getElementById("addUserItemButton"),
   addDialogOverlay: document.getElementById("addDialogOverlay"),
@@ -65,7 +67,16 @@ const dom = {
   cancelFavoriteDialogButton: document.getElementById("cancelFavoriteDialogButton"),
   saveFavoriteDialogButton: document.getElementById("saveFavoriteDialogButton"),
   favoriteDialogDescription: document.getElementById("favoriteDialogDescription"),
-  favoriteTabChecklist: document.getElementById("favoriteTabChecklist")
+  favoriteTabChecklist: document.getElementById("favoriteTabChecklist"),
+  customDialogOverlay: document.getElementById("customDialogOverlay"),
+  closeCustomDialogButton: document.getElementById("closeCustomDialogButton"),
+  cancelCustomDialogButton: document.getElementById("cancelCustomDialogButton"),
+  confirmCustomDialogButton: document.getElementById("confirmCustomDialogButton"),
+  customDialogTitle: document.getElementById("customDialogTitle"),
+  customDialogDescription: document.getElementById("customDialogDescription"),
+  customDialogField: document.getElementById("customDialogField"),
+  customDialogInput: document.getElementById("customDialogInput"),
+  customDialogError: document.getElementById("customDialogError")
 };
 
 function setOverlayVisibility(element, visible) {
@@ -76,6 +87,25 @@ function setOverlayVisibility(element, visible) {
   }
 
   element.style.display = element.classList.contains("modal-overlay") ? "block" : "grid";
+}
+
+function createEmptyCustomDialogState() {
+  return {
+    open: false,
+    title: "",
+    description: "",
+    confirmLabel: "OK",
+    cancelLabel: "キャンセル",
+    value: "",
+    placeholder: "",
+    error: "",
+    inputMode: false,
+    danger: false,
+    enterAction: "confirm",
+    validate: null,
+    normalizeValue: null,
+    resolver: null
+  };
 }
 
 function clamp(value, min, max) {
@@ -391,6 +421,149 @@ function getFavoriteTabLabelsForItem(item) {
 
 function getTypeLabel(type) {
   return type === "image" ? "画像" : "オブジェクト";
+}
+
+function isUserItem(item) {
+  return item?.sourceTab === "user";
+}
+
+function getSelectedItems() {
+  return state.selectedItemIds
+    .map((id) => findItemById(id))
+    .filter(Boolean);
+}
+
+function getDeletableSelectedItems() {
+  const items = getSelectedItems();
+  if (items.length === 0) {
+    return [];
+  }
+  return items.every(isUserItem) ? items : [];
+}
+
+function canDeleteActiveFavoriteTab() {
+  if (!isFavoriteTabKey(state.activeTab)) {
+    return false;
+  }
+
+  const favoriteTabId = getFavoriteTabIdFromKey(state.activeTab);
+  return Boolean(favoriteTabId && favoriteTabId !== DEFAULT_FAVORITE_TAB_ID);
+}
+
+function renderCustomDialog() {
+  const dialog = state.customDialog;
+  if (!dialog.open) {
+    setOverlayVisibility(dom.customDialogOverlay, false);
+    dom.customDialogTitle.textContent = "";
+    dom.customDialogDescription.textContent = "";
+    dom.customDialogField.hidden = true;
+    dom.customDialogInput.value = "";
+    dom.customDialogInput.placeholder = "";
+    dom.customDialogError.hidden = true;
+    dom.customDialogError.textContent = "";
+    dom.confirmCustomDialogButton.classList.remove("custom-dialog-confirm", "is-danger");
+    dom.confirmCustomDialogButton.classList.add("primary-button");
+    return;
+  }
+
+  setOverlayVisibility(dom.customDialogOverlay, true);
+  dom.customDialogTitle.textContent = dialog.title;
+  dom.customDialogDescription.textContent = dialog.description;
+  dom.customDialogField.hidden = !dialog.inputMode;
+  dom.customDialogInput.value = dialog.value;
+  dom.customDialogInput.placeholder = dialog.placeholder || "";
+  dom.customDialogError.hidden = !dialog.error;
+  dom.customDialogError.textContent = dialog.error || "";
+  dom.cancelCustomDialogButton.textContent = dialog.cancelLabel;
+  dom.confirmCustomDialogButton.textContent = dialog.confirmLabel;
+  dom.confirmCustomDialogButton.classList.toggle("custom-dialog-confirm", dialog.danger);
+  dom.confirmCustomDialogButton.classList.toggle("is-danger", dialog.danger);
+}
+
+function focusCustomDialogPrimaryControl() {
+  requestAnimationFrame(() => {
+    if (!state.customDialog.open) {
+      return;
+    }
+
+    if (state.customDialog.inputMode) {
+      dom.customDialogInput.focus();
+      dom.customDialogInput.select();
+      return;
+    }
+
+    if (state.customDialog.enterAction === "cancel") {
+      dom.cancelCustomDialogButton.focus();
+      return;
+    }
+
+    dom.confirmCustomDialogButton.focus();
+  });
+}
+
+function closeCustomDialog(result = null) {
+  if (!state.customDialog.open) {
+    return;
+  }
+
+  const resolver = state.customDialog.resolver;
+  state.customDialog = createEmptyCustomDialogState();
+  renderCustomDialog();
+  if (resolver) {
+    resolver(result);
+  }
+}
+
+function submitCustomDialog() {
+  if (!state.customDialog.open) {
+    return;
+  }
+
+  if (state.customDialog.inputMode) {
+    const rawValue = state.customDialog.value;
+    const error = state.customDialog.validate ? state.customDialog.validate(rawValue) : "";
+    if (error) {
+      state.customDialog.error = error;
+      renderCustomDialog();
+      focusCustomDialogPrimaryControl();
+      return;
+    }
+
+    const result = state.customDialog.normalizeValue
+      ? state.customDialog.normalizeValue(rawValue)
+      : rawValue;
+    closeCustomDialog(result);
+    return;
+  }
+
+  closeCustomDialog(true);
+}
+
+function handleCustomDialogEnterKey() {
+  if (!state.customDialog.open) {
+    return;
+  }
+
+  if (state.customDialog.enterAction === "cancel") {
+    closeCustomDialog();
+    return;
+  }
+
+  submitCustomDialog();
+}
+
+function openCustomDialog(config) {
+  return new Promise((resolve) => {
+    state.customDialog = {
+      ...createEmptyCustomDialogState(),
+      ...config,
+      open: true,
+      value: config.initialValue || "",
+      resolver: resolve
+    };
+    renderCustomDialog();
+    focusCustomDialogPrimaryControl();
+  });
 }
 
 function motifPath(kind) {
@@ -748,6 +921,7 @@ const state = {
   modalOpen: false,
   addDialogOpen: false,
   favoriteDialogOpen: false,
+  customDialog: createEmptyCustomDialogState(),
   objectPickMode: false,
   nextFavoriteTabId: 2,
   nextUserId: 4,
@@ -876,38 +1050,37 @@ function hasFavoriteTabLabel(label, ignoredFavoriteTabId = null) {
 }
 
 function requestFavoriteTabLabel(initialValue, ignoredFavoriteTabId = null) {
-  let draft = initialValue;
+  return openCustomDialog({
+    title: "タブ名を入力",
+    description: "お気に入りタブ名を入力してください。",
+    confirmLabel: "保存",
+    cancelLabel: "キャンセル",
+    inputMode: true,
+    initialValue,
+    placeholder: "お気に入り",
+    validate: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return "タブ名を入力してください。";
+      }
 
-  while (true) {
-    const nextLabel = window.prompt("お気に入りタブ名を入力してください。", draft);
-    if (nextLabel === null) {
-      return null;
-    }
+      if (hasFavoriteTabLabel(trimmed, ignoredFavoriteTabId)) {
+        return "同じ名前のタブは使えません。";
+      }
 
-    const trimmed = nextLabel.trim();
-    if (!trimmed) {
-      window.alert("タブ名を入力してください。");
-      draft = initialValue;
-      continue;
-    }
-
-    if (hasFavoriteTabLabel(trimmed, ignoredFavoriteTabId)) {
-      window.alert("同じ名前のタブは使えません。");
-      draft = trimmed;
-      continue;
-    }
-
-    return trimmed;
-  }
+      return "";
+    },
+    normalizeValue: (value) => value.trim()
+  });
 }
 
-function promptRenameFavoriteTab(favoriteTabId) {
+async function promptRenameFavoriteTab(favoriteTabId) {
   const favoriteTab = getFavoriteTabById(favoriteTabId);
   if (!favoriteTab) {
     return;
   }
 
-  const nextLabel = requestFavoriteTabLabel(favoriteTab.label, favoriteTab.id);
+  const nextLabel = await requestFavoriteTabLabel(favoriteTab.label, favoriteTab.id);
   if (nextLabel === null) {
     return;
   }
@@ -916,19 +1089,19 @@ function promptRenameFavoriteTab(favoriteTabId) {
   render();
 }
 
-function renameActiveFavoriteTab() {
+async function renameActiveFavoriteTab() {
   if (!isFavoriteTabKey(state.activeTab)) {
     return;
   }
 
   const favoriteTabId = getFavoriteTabIdFromKey(state.activeTab);
   if (favoriteTabId) {
-    promptRenameFavoriteTab(favoriteTabId);
+    await promptRenameFavoriteTab(favoriteTabId);
   }
 }
 
-function addFavoriteTab() {
-  const nextLabel = requestFavoriteTabLabel(buildFavoriteTabDefaultLabel());
+async function addFavoriteTab() {
+  const nextLabel = await requestFavoriteTabLabel(buildFavoriteTabDefaultLabel());
   if (nextLabel === null) {
     return;
   }
@@ -937,6 +1110,53 @@ function addFavoriteTab() {
   state.nextFavoriteTabId += 1;
   state.favoriteTabs.push(createFavoriteTab(favoriteTabId, nextLabel));
   setActiveTab(getFavoriteTabKey(favoriteTabId));
+}
+
+async function deleteFavoriteTab(favoriteTabId) {
+  const favoriteTab = getFavoriteTabById(favoriteTabId);
+  if (!favoriteTab || favoriteTab.id === DEFAULT_FAVORITE_TAB_ID) {
+    return;
+  }
+
+  const confirmed = await openCustomDialog({
+    title: "タブを削除",
+    description: `「${favoriteTab.label}」タブを削除しますか？ このタブへのお気に入り登録だけが解除されます。`,
+    confirmLabel: "削除",
+    cancelLabel: "キャンセル",
+    danger: true,
+    enterAction: "cancel"
+  });
+  if (!confirmed) {
+    return;
+  }
+
+  state.favoriteTabs = state.favoriteTabs.filter((tab) => tab.id !== favoriteTabId);
+
+  getAllItems().forEach((item) => {
+    if (item.favoriteTabIds.includes(favoriteTabId)) {
+      setItemFavoriteTabs(
+        item,
+        item.favoriteTabIds.filter((tabId) => tabId !== favoriteTabId)
+      );
+    }
+  });
+
+  clearSelection();
+  if (state.activeTab === getFavoriteTabKey(favoriteTabId)) {
+    state.activeTab = getFavoriteTabKey(DEFAULT_FAVORITE_TAB_ID);
+  }
+  render();
+}
+
+async function deleteActiveFavoriteTab() {
+  if (!isFavoriteTabKey(state.activeTab)) {
+    return;
+  }
+
+  const favoriteTabId = getFavoriteTabIdFromKey(state.activeTab);
+  if (favoriteTabId) {
+    await deleteFavoriteTab(favoriteTabId);
+  }
 }
 
 function openFavoriteDialog(itemId) {
@@ -983,14 +1203,44 @@ function saveFavoriteDialog() {
   render();
 }
 
-function deleteUserItem(itemId) {
-  if (!window.confirm("このユーザカスタムアイテムを削除しますか？")) {
+async function deleteUserItems(itemIds) {
+  const targetIds = [...new Set(itemIds.filter(Boolean))];
+  if (targetIds.length === 0) {
     return;
   }
-  state.collections.user.images = state.collections.user.images.filter((item) => item.id !== itemId);
-  state.collections.user.editableObjects = state.collections.user.editableObjects.filter((item) => item.id !== itemId);
-  state.selectedItemIds = state.selectedItemIds.filter((id) => id !== itemId);
+
+  const description = targetIds.length === 1
+    ? "このユーザカスタムアイテムを削除しますか？"
+    : `選択した ${targetIds.length} 件のユーザカスタムアイテムを削除しますか？`;
+  const confirmed = await openCustomDialog({
+    title: "アイテムを削除",
+    description,
+    confirmLabel: "削除",
+    cancelLabel: "キャンセル",
+    danger: true,
+    enterAction: "cancel"
+  });
+  if (!confirmed) {
+    return;
+  }
+
+  state.collections.user.images = state.collections.user.images.filter((item) => !targetIds.includes(item.id));
+  state.collections.user.editableObjects = state.collections.user.editableObjects.filter((item) => !targetIds.includes(item.id));
+  state.selectedItemIds = state.selectedItemIds.filter((id) => !targetIds.includes(id));
+  if (targetIds.includes(state.editingItemId)) {
+    state.editingItemId = null;
+    state.nameEditDraft = "";
+  }
   render();
+}
+
+async function deleteSelectedItems() {
+  const items = getDeletableSelectedItems();
+  if (items.length === 0) {
+    return;
+  }
+
+  await deleteUserItems(items.map((item) => item.id));
 }
 
 function startInlineNameEdit(itemId) {
@@ -1057,27 +1307,6 @@ function commitInlineNameEdit() {
 
 function renameItem(itemId) {
   startInlineNameEdit(itemId);
-  return;
-
-  const item = findItemById(itemId);
-  if (!item) {
-    return;
-  }
-
-  const nextName = window.prompt("新しい名称を入力してください。", item.name);
-  if (nextName === null) {
-    return;
-  }
-
-  const trimmed = nextName.trim();
-  if (!trimmed) {
-    window.alert("名称を入力してください。");
-    return;
-  }
-
-  item.name = trimmed;
-  item.searchableText = buildSearchableText(item);
-  render();
 }
 
 function openModal() {
@@ -1100,6 +1329,7 @@ function closeModal() {
   setOverlayVisibility(dom.modalOverlay, false);
   closeFavoriteDialog();
   closeAddDialog();
+  closeCustomDialog();
   document.body.style.overflow = "";
 }
 
@@ -1403,16 +1633,12 @@ function renderCard(item) {
   const favoriteAriaLabel = item.favorite ? "お気に入り先を変更" : "お気に入りに登録";
   const selectionClass = isSelected ? "selection-toggle is-selected" : "selection-toggle";
   const selectionAriaLabel = isSelected ? `${item.name} の選択を解除` : `${item.name} を選択`;
-  const deleteButton = state.activeTab === "user"
-    ? `<button class="delete-button" data-action="delete" data-id="${item.id}" type="button" aria-label="削除">×</button>`
-    : "";
 
   return `
     <article class="asset-card ${isSelected ? "is-selected" : ""}" data-id="${item.id}">
       <div class="card-actions">
-        <button class="${selectionClass}" data-action="select-card" data-id="${item.id}" type="button" aria-pressed="${isSelected ? "true" : "false"}" aria-label="${escapeHtml(selectionAriaLabel)}">✓</button>
-        <button class="${favoriteClass}" data-action="favorite" data-id="${item.id}" type="button" aria-label="${favoriteAriaLabel}">★</button>
-        ${deleteButton}
+        <button class="${favoriteClass} card-action-left" data-action="favorite" data-id="${item.id}" type="button" aria-label="${favoriteAriaLabel}">★</button>
+        <button class="${selectionClass} card-action-right" data-action="select-card" data-id="${item.id}" type="button" aria-pressed="${isSelected ? "true" : "false"}" aria-label="${escapeHtml(selectionAriaLabel)}">✓</button>
       </div>
       <div class="asset-preview">${renderPreviewMarkup(item.preview)}</div>
       <div class="card-meta">
@@ -1445,6 +1671,7 @@ function renderCards() {
 function renderToolbarState() {
   dom.addUserItemButton.hidden = state.activeTab !== "user";
   dom.renameFavoriteTabButton.hidden = !isFavoriteTabKey(state.activeTab);
+  dom.deleteFavoriteTabButton.hidden = !canDeleteActiveFavoriteTab();
 }
 
 function renderSelectionDetails() {
@@ -1640,11 +1867,12 @@ function renderSelectionDetailsInline() {
 }
 
 function renderFooterState() {
-  const items = state.selectedItemIds
-    .map((id) => findItemById(id))
-    .filter(Boolean);
+  const items = getSelectedItems();
+  const deletableItems = getDeletableSelectedItems();
 
   dom.insertButton.disabled = items.length === 0;
+  dom.deleteSelectedButton.hidden = deletableItems.length === 0;
+  dom.deleteSelectedButton.textContent = deletableItems.length > 1 ? `削除 (${deletableItems.length})` : "削除";
   if (items.length === 0) {
     dom.statusMessage.textContent = "項目を選択すると「挿入」が有効になります。";
     return;
@@ -1734,18 +1962,31 @@ function render() {
   renderFooterState();
   renderSlideItems();
   renderFavoriteDialog();
+  renderCustomDialog();
 }
 
-function handleTabRowClick(event) {
+async function handleTabRowClick(event) {
   const addButton = event.target.closest("[data-action='add-favorite-tab']");
   if (addButton) {
-    addFavoriteTab();
+    await addFavoriteTab();
     return;
   }
 
   const tabButton = event.target.closest("[data-action='select-tab']");
   if (tabButton) {
     setActiveTab(tabButton.dataset.tab);
+  }
+}
+
+function handleCustomDialogInput(event) {
+  if (event.target !== dom.customDialogInput) {
+    return;
+  }
+
+  state.customDialog.value = event.target.value;
+  if (state.customDialog.error) {
+    state.customDialog.error = "";
+    renderCustomDialog();
   }
 }
 
@@ -1761,13 +2002,6 @@ function handleGridClick(event) {
   if (favoriteButton) {
     event.stopPropagation();
     openFavoriteDialog(favoriteButton.dataset.id);
-    return;
-  }
-
-  const deleteButton = event.target.closest("[data-action='delete']");
-  if (deleteButton) {
-    event.stopPropagation();
-    deleteUserItem(deleteButton.dataset.id);
     return;
   }
 }
@@ -1860,16 +2094,22 @@ function bindEvents() {
   dom.cancelButton.addEventListener("click", closeModal);
   dom.addUserItemButton.addEventListener("click", openAddDialog);
   dom.renameFavoriteTabButton.addEventListener("click", renameActiveFavoriteTab);
+  dom.deleteFavoriteTabButton.addEventListener("click", deleteActiveFavoriteTab);
+  dom.deleteSelectedButton.addEventListener("click", deleteSelectedItems);
   dom.closeAddDialogButton.addEventListener("click", closeAddDialog);
   dom.cancelAddDialogButton.addEventListener("click", closeAddDialog);
   dom.closeFavoriteDialogButton.addEventListener("click", closeFavoriteDialog);
   dom.cancelFavoriteDialogButton.addEventListener("click", closeFavoriteDialog);
   dom.saveFavoriteDialogButton.addEventListener("click", saveFavoriteDialog);
+  dom.closeCustomDialogButton.addEventListener("click", () => closeCustomDialog());
+  dom.cancelCustomDialogButton.addEventListener("click", () => closeCustomDialog());
+  dom.confirmCustomDialogButton.addEventListener("click", submitCustomDialog);
 
   dom.tabRow.addEventListener("click", handleTabRowClick);
   dom.searchInput.addEventListener("input", (event) => setSearchQuery(event.target.value));
   dom.insertButton.addEventListener("click", insertSelectedItem);
   dom.cardGrid.addEventListener("click", handleGridClick);
+  dom.customDialogInput.addEventListener("input", handleCustomDialogInput);
   dom.modalWindow.addEventListener("pointermove", handleModalWindowPointerMove);
   dom.modalWindow.addEventListener("pointerleave", handleModalWindowPointerLeave);
   dom.modalWindow.addEventListener("pointerdown", handleModalWindowPointerDown);
@@ -1913,7 +2153,23 @@ function bindEvents() {
     }
   });
 
+  dom.customDialogOverlay.addEventListener("click", (event) => {
+    if (event.target === dom.customDialogOverlay) {
+      closeCustomDialog();
+    }
+  });
+
   document.addEventListener("keydown", (event) => {
+    if (state.customDialog.open && event.key === "Enter") {
+      event.preventDefault();
+      handleCustomDialogEnterKey();
+      return;
+    }
+    if (state.customDialog.open && event.key === "Escape") {
+      event.preventDefault();
+      closeCustomDialog();
+      return;
+    }
     if (event.key === "Escape" && state.favoriteDialogOpen) {
       closeFavoriteDialog();
       return;
@@ -1936,6 +2192,7 @@ function init() {
   setOverlayVisibility(dom.modalOverlay, false);
   setOverlayVisibility(dom.addDialogOverlay, false);
   setOverlayVisibility(dom.favoriteDialogOverlay, false);
+  setOverlayVisibility(dom.customDialogOverlay, false);
   bindEvents();
   renderObjectPreviewForDialog();
   render();
